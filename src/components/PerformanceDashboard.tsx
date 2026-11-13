@@ -919,7 +919,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
 
             {/* Row 2: Wrapped Category Chips + Full-Width Mobile Challenge Picker */}
             <div className="pt-2 border-t border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 w-full lg:w-auto">
                 {CATEGORY_FILTERS.map((cat) => (
                   <button
                     key={cat}
@@ -934,7 +934,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                         setDisciplineFilter('all');
                       }
                     }}
-                    className={`min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    className={`min-h-[36px] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-center cursor-pointer ${
                       categoryFilter === cat
                         ? 'bg-teal-400 text-slate-950 font-semibold shadow-sm'
                         : 'bg-slate-900 border border-white/10 text-slate-300 hover:text-white hover:border-white/25'

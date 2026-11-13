@@ -175,7 +175,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           }
           referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
-          className="absolute inset-0 w-full h-full object-cover object-[76%_center] rtl:object-[24%_center] sm:object-center opacity-100 pointer-events-none"
+          className="absolute inset-0 w-full h-full object-cover object-[78%_center] lg:object-right opacity-95 pointer-events-none"
         />
       ) : (
         <div
@@ -186,7 +186,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
       {/* Atmospheric scrim preserving contrast over the tabletop key art */}
       <div
-        className="absolute inset-0 bg-gradient-to-b from-[#0B111E]/60 via-[#0B111E]/35 to-[#0B111E]/75 sm:bg-gradient-to-r rtl:sm:bg-gradient-to-l sm:from-[#0B111E]/80 sm:via-[#0B111E]/45 sm:to-transparent pointer-events-none"
+        className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/70 pointer-events-none"
         aria-hidden="true"
       />
 
@@ -387,7 +387,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
       {/* Main Content Area: Brand Hero + Interactive Mode Surface */}
       <div className="relative z-10 flex-1 min-h-0 w-full overflow-y-auto overscroll-contain clean-scroll">
-        <div className="w-full max-w-3xl px-4 sm:px-10 lg:px-16 pt-2 sm:pt-6 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-3 sm:space-y-4">
+        <div className="w-full max-w-xl lg:max-w-xl px-4 sm:px-8 lg:px-12 pt-2 sm:pt-6 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-3 sm:space-y-4">
           {/* Brand Lockup & Clean Typographic Metadata */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
@@ -465,7 +465,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
           {/* Mode Selector + Single-Elevation Glass Surface */}
           <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex p-1 rounded-xl bg-slate-950/45 backdrop-blur-md border border-white/15">
+            <div className="inline-flex p-1 rounded-xl bg-slate-950/30 backdrop-blur-md border border-white/20">
               <button
                 type="button"
                 onClick={() => onSelectMode('daily')}
@@ -493,7 +493,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             </div>
 
             {isDaily ? (
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950/50 backdrop-blur-md border border-white/15 space-y-3 shadow-xl">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950/25 sm:bg-slate-950/30 backdrop-blur-xl border border-white/20 space-y-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                 <div className="flex items-center justify-between gap-2 text-xs text-slate-200">
                   <span className="truncate font-medium">
                     {ar
@@ -519,7 +519,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                         key={id}
                         type="button"
                         onClick={() => onQuickLaunchDiscipline(id)}
-                        className={`group w-full min-h-[56px] text-start p-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.13] active:scale-[0.99] border border-white/12 hover:${theme.borderClass} flex sm:flex-col items-center sm:items-stretch justify-between gap-2.5 transition-all cursor-pointer`}
+                        className={`group w-full min-h-[56px] text-start p-3 rounded-xl bg-white/[0.08] hover:bg-white/[0.18] active:scale-[0.99] backdrop-blur-md border border-white/15 hover:${theme.borderClass} flex sm:flex-col items-center sm:items-stretch justify-between gap-2.5 transition-all cursor-pointer`}
                       >
                         <div className="flex items-center sm:justify-between gap-2.5 min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
@@ -614,7 +614,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 )}
               </div>
             ) : (
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950/50 backdrop-blur-md border border-white/15 space-y-3 shadow-xl">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950/25 sm:bg-slate-950/30 backdrop-blur-xl border border-white/20 space-y-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                 {/* Category Filter Bar + Compact Pace Switcher (flex-wrap prevents mobile/RTL clipping) */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -623,10 +623,10 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                         key={cat}
                         type="button"
                         onClick={() => handleSelectCategory(cat)}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap cursor-pointer backdrop-blur-md ${
                           categoryFilter === cat
-                            ? 'bg-amber-400 text-slate-950 font-semibold'
-                            : 'bg-white/[0.08] text-slate-200 hover:bg-white/15 hover:text-white'
+                            ? 'bg-amber-400 text-slate-950 font-semibold shadow-sm'
+                            : 'bg-white/[0.10] text-slate-100 hover:bg-white/[0.20]'
                         }`}
                       >
                         {getCategoryLabel(cat, lang)}
@@ -634,7 +634,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                     ))}
                   </div>
 
-                  <div className="grid grid-cols-3 sm:inline-flex p-0.5 rounded-lg bg-white/[0.08] border border-white/15 sm:ms-auto shrink-0">
+                  <div className="grid grid-cols-3 sm:inline-flex p-0.5 rounded-lg bg-white/[0.10] backdrop-blur-md border border-white/20 sm:ms-auto shrink-0">
                     {(['relaxed', 'standard', 'master'] as Difficulty[]).map((diff) => (
                       <button
                         key={diff}
@@ -666,10 +666,10 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                         key={id}
                         type="button"
                         onClick={() => onSelectMode(id)}
-                        className={`min-h-[54px] px-2.5 py-2 rounded-xl text-start border transition-colors cursor-pointer flex items-center gap-2.5 ${
+                        className={`min-h-[54px] px-2.5 py-2 rounded-xl text-start border transition-all cursor-pointer flex items-center gap-2.5 backdrop-blur-md ${
                           active
-                            ? theme.activeCardClass
-                            : 'bg-white/[0.05] border-white/10 text-slate-200 hover:bg-white/[0.11]'
+                            ? `${theme.activeCardClass} shadow-md`
+                            : 'bg-white/[0.08] border-white/15 text-slate-100 hover:bg-white/[0.18]'
                         }`}
                       >
                         <span
