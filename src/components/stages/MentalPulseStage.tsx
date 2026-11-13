@@ -140,10 +140,12 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
   const pauseStartRef = useRef<number | null>(null);
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
+  const isPausedRef = useRef(isPaused);
 
   const current = prompts[idx];
 
   useEffect(() => {
+    isPausedRef.current = isPaused;
     if (isPaused) {
       pauseStartRef.current = performance.now();
     } else if (pauseStartRef.current !== null) {
@@ -247,7 +249,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
     let rafId = 0;
 
     const tick = (now: number) => {
-      if (!isPaused && !lockRef.current) {
+      if (!isPausedRef.current && !lockRef.current) {
         const dt = Math.min(now - lastTick, 50);
         remaining = Math.max(0, remaining - dt);
         setFuseProgress(remaining / fuseMs);
@@ -262,7 +264,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, idx, fuseMs, isPaused, handleTimeout]);
+  }, [phase, idx, fuseMs, handleTimeout]);
 
   const handlePick = useCallback(
     (choice: SideChoice) => {
@@ -397,14 +399,14 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
           </div>
         ) : (
           <div key={current.id} className="w-full space-y-3 animate-card-enter">
-            <div className="grid grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => handlePick('left')}
-                className="h-40 rounded-2xl bg-[#F8FAFC] hover:bg-white text-slate-950 border-2 border-white border-b-4 border-b-slate-300 shadow-xl flex flex-col items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+                className="h-32 sm:h-40 rounded-2xl bg-[#F8FAFC] hover:bg-white text-slate-950 border-2 border-white border-b-4 border-b-slate-300 shadow-xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-[0.98] cursor-pointer"
               >
                 <span className="text-xs font-medium text-slate-500">Left</span>
-                <span className="font-mono text-2xl sm:text-3xl font-bold tabular-nums">
+                <span className="font-mono text-xl sm:text-3xl font-bold tabular-nums">
                   {current.leftExpr}
                 </span>
                 {leftValueRevealed && (
@@ -417,10 +419,10 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
               <button
                 type="button"
                 onClick={() => handlePick('right')}
-                className="h-40 rounded-2xl bg-[#131C2E] hover:bg-slate-800 text-white border-2 border-white/15 border-b-4 border-b-slate-950 shadow-xl flex flex-col items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+                className="h-32 sm:h-40 rounded-2xl bg-[#131C2E] hover:bg-slate-800 text-white border-2 border-white/15 border-b-4 border-b-slate-950 shadow-xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-[0.98] cursor-pointer"
               >
                 <span className="text-xs font-medium text-slate-400">Right</span>
-                <span className="font-mono text-2xl sm:text-3xl font-bold tabular-nums">
+                <span className="font-mono text-xl sm:text-3xl font-bold tabular-nums">
                   {current.rightExpr}
                 </span>
               </button>
@@ -458,12 +460,12 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
       </div>
 
       {/* 3 Response Keys */}
-      <div className="w-full max-w-lg mt-2 grid grid-cols-3 gap-2.5">
+      <div className="w-full max-w-lg mt-2 grid grid-cols-3 gap-2 sm:gap-2.5">
         <button
           type="button"
           disabled={phase !== 'ACTIVE'}
           onClick={() => handlePick('left')}
-          className="h-13 rounded-xl bg-slate-100 hover:bg-white text-slate-950 border-b-4 border-b-slate-300 font-semibold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
+          className="h-12 sm:h-13 rounded-xl bg-slate-100 hover:bg-white text-slate-950 border-b-4 border-b-slate-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
         >
           <ArrowLeft className="w-4 h-4 text-teal-600" aria-hidden="true" />
           <span>Left</span>
@@ -473,17 +475,17 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
           type="button"
           disabled={phase !== 'ACTIVE'}
           onClick={() => handlePick('equal')}
-          className="h-13 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/15 border-b-4 border-b-slate-950 font-semibold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
+          className="h-12 sm:h-13 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/15 border-b-4 border-b-slate-950 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
         >
           <ArrowDown className="w-4 h-4 text-amber-400" aria-hidden="true" />
-          <span>Equal (=)</span>
+          <span>Equal</span>
         </button>
 
         <button
           type="button"
           disabled={phase !== 'ACTIVE'}
           onClick={() => handlePick('right')}
-          className="h-13 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/15 border-b-4 border-b-slate-950 font-semibold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
+          className="h-12 sm:h-13 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/15 border-b-4 border-b-slate-950 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
         >
           <span>Right</span>
           <ArrowRight className="w-4 h-4 text-teal-400" aria-hidden="true" />

@@ -19,6 +19,7 @@ import {
   saveProgress,
 } from './utils/storage';
 import { TitleScreen } from './components/TitleScreen';
+import { PerformanceDashboard } from './components/PerformanceDashboard';
 import { HudBar } from './components/HudBar';
 import { StageBriefing } from './components/StageBriefing';
 import {
@@ -35,6 +36,10 @@ import { SequenceTrailStage } from './components/stages/SequenceTrailStage';
 import { StroopReflexStage } from './components/stages/StroopReflexStage';
 import { DualPairsStage } from './components/stages/DualPairsStage';
 import { MentalPulseStage } from './components/stages/MentalPulseStage';
+import { MatrixLogicStage } from './components/stages/MatrixLogicStage';
+import { DigitSpanStage } from './components/stages/DigitSpanStage';
+import { CipherSequenceStage } from './components/stages/CipherSequenceStage';
+import { RuleSwitchStage } from './components/stages/RuleSwitchStage';
 
 const INITIAL_HUD: LiveStageHud = {
   score: 0,
@@ -83,20 +88,28 @@ export default function App() {
     });
   }, []);
 
+  const startRunForMode = useCallback(
+    (mode: GameMode) => {
+      const seed =
+        mode === 'daily'
+          ? `daily:${todayKey}`
+          : `practice:${mode}:${Date.now()}`;
+      setSelectedMode(mode);
+      setRunSeed(seed);
+      setStageIndex(0);
+      setStageResults([]);
+      setHud(INITIAL_HUD);
+      setShowRulesHelp(false);
+      setRunKey((k) => k + 1);
+      setGameState('STAGE_BRIEFING');
+      sound.playTick();
+    },
+    [todayKey]
+  );
+
   const startNewRun = useCallback(() => {
-    const seed =
-      selectedMode === 'daily'
-        ? `daily:${todayKey}`
-        : `practice:${selectedMode}:${Date.now()}`;
-    setRunSeed(seed);
-    setStageIndex(0);
-    setStageResults([]);
-    setHud(INITIAL_HUD);
-    setShowRulesHelp(false);
-    setRunKey((k) => k + 1);
-    setGameState('STAGE_BRIEFING');
-    sound.playTick();
-  }, [selectedMode, todayKey]);
+    startRunForMode(selectedMode);
+  }, [startRunForMode, selectedMode]);
 
   const handleBeginStageFromBriefing = useCallback(() => {
     setGameState('PLAYING');
@@ -147,19 +160,13 @@ export default function App() {
           );
         } else {
           setProgress((prev) =>
-            recordPracticeCompletion(
-              prev,
-              result.discipline,
-              result.score,
-              result.avgReactionMs,
-              result.accuracy
-            )
+            recordPracticeCompletion(prev, result, todayKey, activeDifficulty)
           );
         }
         setGameState('GAME_OVER');
       }
     },
-    [stageResults, stageIndex, stageQueue.length, selectedMode, todayKey, dailyNumber]
+    [stageResults, stageIndex, stageQueue.length, selectedMode, todayKey, dailyNumber, activeDifficulty]
   );
 
   const handleContinueNextStage = useCallback(() => {
@@ -207,7 +214,7 @@ export default function App() {
   const isStagePaused = gameState !== 'PLAYING' || showRulesHelp;
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden bg-[#0B111E] text-slate-100">
+    <main className="relative w-screen h-dvh overflow-hidden bg-[#0B111E] text-slate-100">
       {gameState === 'TITLE_MENU' ? (
         <TitleScreen
           todayKey={todayKey}
@@ -218,6 +225,15 @@ export default function App() {
           onSelectDifficulty={setSelectedDifficulty}
           onStart={startNewRun}
           onViewTodayResult={handleViewTodayResult}
+          onOpenDashboard={() => setGameState('DASHBOARD')}
+          onToggleMute={handleToggleMute}
+        />
+      ) : gameState === 'DASHBOARD' ? (
+        <PerformanceDashboard
+          todayKey={todayKey}
+          progress={progress}
+          onMenu={() => setGameState('TITLE_MENU')}
+          onPlayDaily={() => startRunForMode('daily')}
           onToggleMute={handleToggleMute}
         />
       ) : (
@@ -230,12 +246,17 @@ export default function App() {
             discipline={currentDiscipline}
             hud={hud}
             muted={progress.muted}
+            showPlayMetrics={gameState === 'PLAYING' || gameState === 'PAUSED'}
+            onMenu={() => {
+              setShowRulesHelp(false);
+              setGameState('TITLE_MENU');
+            }}
             onToggleMute={handleToggleMute}
             onShowRules={() => setShowRulesHelp(true)}
             onPause={handlePauseToggle}
           />
 
-          <div className="flex-1 w-full pt-14 pb-6 flex items-center justify-center overflow-hidden">
+          <div className="flex-1 w-full pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] flex items-center justify-center overflow-y-auto overscroll-contain clean-scroll">
             {gameState === 'STAGE_BRIEFING' ? (
               <StageBriefing
                 discipline={currentDiscipline}
@@ -244,6 +265,7 @@ export default function App() {
                 stageIndex={stageIndex}
                 totalStages={stageQueue.length}
                 onStartStage={handleBeginStageFromBriefing}
+                onMenu={() => setGameState('TITLE_MENU')}
               />
             ) : (
               <>
@@ -312,6 +334,50 @@ export default function App() {
                     onComplete={handleStageComplete}
                   />
                 )}
+
+                {currentDiscipline === 'matrix' && (
+                  <MatrixLogicStage
+                    key={`matrix-${runKey}`}
+                    seed={runSeed}
+                    difficulty={activeDifficulty}
+                    isPaused={isStagePaused}
+                    onHudUpdate={setHud}
+                    onComplete={handleStageComplete}
+                  />
+                )}
+
+                {currentDiscipline === 'digitspan' && (
+                  <DigitSpanStage
+                    key={`digitspan-${runKey}`}
+                    seed={runSeed}
+                    difficulty={activeDifficulty}
+                    isPaused={isStagePaused}
+                    onHudUpdate={setHud}
+                    onComplete={handleStageComplete}
+                  />
+                )}
+
+                {currentDiscipline === 'cipher' && (
+                  <CipherSequenceStage
+                    key={`cipher-${runKey}`}
+                    seed={runSeed}
+                    difficulty={activeDifficulty}
+                    isPaused={isStagePaused}
+                    onHudUpdate={setHud}
+                    onComplete={handleStageComplete}
+                  />
+                )}
+
+                {currentDiscipline === 'ruleswitch' && (
+                  <RuleSwitchStage
+                    key={`ruleswitch-${runKey}`}
+                    seed={runSeed}
+                    difficulty={activeDifficulty}
+                    isPaused={isStagePaused}
+                    onHudUpdate={setHud}
+                    onComplete={handleStageComplete}
+                  />
+                )}
               </>
             )}
           </div>
@@ -325,6 +391,10 @@ export default function App() {
               totalStages={stageQueue.length}
               isOverlayHelp
               onStartStage={() => setShowRulesHelp(false)}
+              onMenu={() => {
+                setShowRulesHelp(false);
+                setGameState('TITLE_MENU');
+              }}
             />
           )}
 
@@ -343,6 +413,7 @@ export default function App() {
               result={lastCompletedResult}
               nextStageTitle={DISCIPLINES[nextDiscipline].title}
               onContinue={handleContinueNextStage}
+              onMenu={() => setGameState('TITLE_MENU')}
             />
           )}
 
@@ -355,6 +426,7 @@ export default function App() {
               stages={stageResults}
               record={progress.dailyRecords[todayKey]}
               onPlayAgain={startNewRun}
+              onOpenDashboard={() => setGameState('DASHBOARD')}
               onReturnTitle={() => setGameState('TITLE_MENU')}
             />
           )}

@@ -249,6 +249,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
   const pauseStartRef = useRef<number | null>(null);
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
+  const isPausedRef = useRef(isPaused);
 
   const currentCard = deck[cardIdx];
   const targetLookback = currentCard.rule === 'shape2' ? 2 : 1;
@@ -256,6 +257,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
   const fuseMs = getCardFuseMs(difficulty, currentCard.rule);
 
   useEffect(() => {
+    isPausedRef.current = isPaused;
     if (isPaused) {
       pauseStartRef.current = performance.now();
     } else if (pauseStartRef.current !== null) {
@@ -363,7 +365,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
     setTimeout(advanceCard, 220);
   }, [phase, advanceCard]);
 
-  // Live Per-Card Fuse Timer
+  // Live Per-Card Fuse Timer (pause-safe)
   useEffect(() => {
     if (phase !== 'ACTIVE') return;
     setFuseProgress(1);
@@ -373,7 +375,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
     let rafId = 0;
 
     const tick = (now: number) => {
-      if (!isPaused && !lockRef.current) {
+      if (!isPausedRef.current && !lockRef.current) {
         const dt = Math.min(now - lastTick, 50);
         remaining = Math.max(0, remaining - dt);
         setFuseProgress(remaining / fuseMs);
@@ -388,7 +390,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, cardIdx, fuseMs, isPaused, handleTimeout]);
+  }, [phase, cardIdx, fuseMs, handleTimeout]);
 
   const handleAnswer = useCallback(
     (playerSaysMatch: boolean) => {
@@ -528,14 +530,14 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
       </div>
 
       {/* Center Focal Card Arena */}
-      <div className="relative flex items-center justify-center gap-5 w-full max-w-lg min-h-[268px]">
+      <div className="relative flex items-center justify-center gap-3 sm:gap-5 w-full max-w-lg min-h-[244px] sm:min-h-[268px]">
         {peekVisible && referenceCard && (
-          <div className="hidden sm:flex flex-col items-center gap-1.5 animate-card-enter">
+          <div className="flex flex-col items-center gap-1.5 animate-card-enter shrink-0">
             <span className="text-[11px] font-medium text-slate-400">
-              {currentCard.rule === 'shape2' ? '2 Cards Ago' : 'Previous'}
+              {currentCard.rule === 'shape2' ? '2 Ago' : 'Prev'}
             </span>
             <div
-              className={`w-24 h-32 rounded-xl border flex flex-col items-center justify-center gap-1.5 ${FINISH_STYLES[referenceCard.finish].bg} ${FINISH_STYLES[referenceCard.finish].border}`}
+              className={`w-20 h-28 sm:w-24 sm:h-32 rounded-xl border flex flex-col items-center justify-center gap-1.5 ${FINISH_STYLES[referenceCard.finish].bg} ${FINISH_STYLES[referenceCard.finish].border}`}
             >
               <CardGlyph shape={referenceCard.shape} finish={referenceCard.finish} compact />
               <span
@@ -601,7 +603,9 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
             />
             <div
               key={currentCard.id}
-              className={`relative w-64 h-72 rounded-2xl border-2 shadow-2xl flex flex-col items-center justify-between p-5 animate-card-enter ${finishStyle.bg} ${finishStyle.border}`}
+              className={`relative ${
+                peekVisible ? 'w-52 sm:w-64' : 'w-60 sm:w-64'
+              } h-60 sm:h-72 rounded-2xl border-2 shadow-2xl flex flex-col items-center justify-between p-4 sm:p-5 animate-card-enter ${finishStyle.bg} ${finishStyle.border}`}
             >
               <div className="w-full flex items-center justify-between">
                 <span

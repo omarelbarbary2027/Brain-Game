@@ -110,11 +110,14 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
   const completedRoundsRef = useRef(0);
   const finishedRef = useRef(false);
   const recallRemainingMsRef = useRef(0);
+  const studyElapsedRef = useRef(0);
+  const isPausedRef = useRef(isPaused);
 
   const currentCfg = configs[roundIdx];
   const currentData = roundData[roundIdx];
 
   useEffect(() => {
+    isPausedRef.current = isPaused;
     if (isPaused) {
       pauseStartedRef.current = performance.now();
     } else if (pauseStartedRef.current !== null) {
@@ -185,9 +188,10 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
     [roundIdx, totalRounds, finishStage]
   );
 
-  // Sequential wave illumination + Memorize timer
+  // Sequential wave illumination + Memorize timer (pause-safe)
   useEffect(() => {
     if (phase !== 'MEMORIZE') return;
+    studyElapsedRef.current = 0;
     setStudyProgress(1);
     setWaveRevealedCount(0);
     setStatusNote(
@@ -196,22 +200,26 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
         : `Memorize ${currentCfg.targetCount} Gold tiles`
     );
 
-    let elapsed = 0;
     let lastTick = performance.now();
     let rafId = 0;
     let lastWaveStep = 0;
     const waveWindow = Math.min(currentCfg.studyMs * 0.45, currentCfg.targetCount * 110);
 
     const tick = (now: number) => {
-      if (!isPaused) {
+      if (!isPausedRef.current) {
         const dt = Math.min(now - lastTick, 50);
-        elapsed += dt;
-        const remaining = Math.max(0, currentCfg.studyMs - elapsed);
+        studyElapsedRef.current += dt;
+        const remaining = Math.max(0, currentCfg.studyMs - studyElapsedRef.current);
         setStudyProgress(remaining / currentCfg.studyMs);
 
         const targetShown = Math.min(
           currentCfg.targetCount,
-          Math.max(1, Math.ceil((elapsed / Math.max(1, waveWindow)) * currentCfg.targetCount))
+          Math.max(
+            1,
+            Math.ceil(
+              (studyElapsedRef.current / Math.max(1, waveWindow)) * currentCfg.targetCount
+            )
+          )
         );
         if (targetShown > lastWaveStep) {
           lastWaveStep = targetShown;
@@ -236,26 +244,24 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, currentCfg, isPaused]);
+  }, [phase, roundIdx, currentCfg]);
 
-  // Live Recall Countdown Fuse
+  // Live Recall Countdown Fuse (pause-safe)
   useEffect(() => {
     if (phase !== 'RECALL') return;
 
-    let remaining = currentCfg.recallMs;
-    recallRemainingMsRef.current = remaining;
+    recallRemainingMsRef.current = currentCfg.recallMs;
     let lastTick = performance.now();
-    let lastSec = Math.ceil(remaining / 1000);
+    let lastSec = Math.ceil(recallRemainingMsRef.current / 1000);
     let rafId = 0;
 
     const tick = (now: number) => {
-      if (!isPaused) {
+      if (!isPausedRef.current) {
         const dt = Math.min(now - lastTick, 50);
-        remaining = Math.max(0, remaining - dt);
-        recallRemainingMsRef.current = remaining;
-        setRecallProgress(remaining / currentCfg.recallMs);
+        recallRemainingMsRef.current = Math.max(0, recallRemainingMsRef.current - dt);
+        setRecallProgress(recallRemainingMsRef.current / currentCfg.recallMs);
 
-        const sec = Math.ceil(remaining / 1000);
+        const sec = Math.ceil(recallRemainingMsRef.current / 1000);
         if (sec !== lastSec) {
           lastSec = sec;
           setRecallSecondsLeft(sec);
@@ -264,7 +270,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
           }
         }
 
-        if (remaining <= 0) {
+        if (recallRemainingMsRef.current <= 0) {
           streakRef.current = 0;
           setStreak(0);
           sound.playMiss();
@@ -279,7 +285,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, currentCfg.recallMs, isPaused, advanceToNextRound]);
+  }, [phase, roundIdx, currentCfg.recallMs, advanceToNextRound]);
 
   const handleTileSelect = useCallback(
     (idx: number) => {
@@ -412,8 +418,8 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
     currentCfg.gridSize === 4
       ? 'w-16 h-16 sm:w-20 sm:h-20'
       : currentCfg.gridSize === 5
-      ? 'w-14 h-14 sm:w-16 sm:h-16'
-      : 'w-12 h-12 sm:w-14 sm:h-14';
+      ? 'w-[52px] h-[52px] sm:w-16 sm:h-16'
+      : 'w-11 h-11 sm:w-14 sm:h-14';
 
   const waveShownSet = useMemo(() => {
     return new Set(currentData.targetsOrdered.slice(0, waveRevealedCount));
@@ -475,12 +481,12 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
 
       {/* Tactile Keycap Board */}
       <div
-        className="p-4 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl"
+        className="p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl"
         role="grid"
         aria-label="Pattern Echo memory grid"
       >
         <div
-          className="grid gap-2.5 sm:gap-3"
+          className="grid gap-1.5 sm:gap-3"
           style={{
             gridTemplateColumns: `repeat(${currentCfg.gridSize}, minmax(0, 1fr))`,
           }}

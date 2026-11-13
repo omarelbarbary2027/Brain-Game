@@ -112,6 +112,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
   const pauseStartRef = useRef<number | null>(null);
   const traceRemainingMsRef = useRef(0);
   const finishedRef = useRef(false);
+  const isPausedRef = useRef(isPaused);
 
   const cfg = configs[roundIdx];
   const currentRoundData = roundNodes[roundIdx];
@@ -119,6 +120,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
   const expectedNumber = cfg.reverse ? cfg.nodeCount - stepsFound : stepsFound + 1;
 
   useEffect(() => {
+    isPausedRef.current = isPaused;
     if (isPaused) {
       pauseStartRef.current = performance.now();
     } else if (pauseStartRef.current !== null) {
@@ -186,7 +188,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
     [roundIdx, totalRounds, finishStage]
   );
 
-  // Study phase timer
+  // Study phase timer (pause-safe)
   useEffect(() => {
     if (phase !== 'STUDY') return;
     setStudyProgress(1);
@@ -203,7 +205,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
     let rafId = 0;
 
     const tick = (now: number) => {
-      if (!isPaused) {
+      if (!isPausedRef.current) {
         const dt = Math.min(now - lastTick, 50);
         remaining = Math.max(0, remaining - dt);
         setStudyProgress(remaining / cfg.studyMs);
@@ -224,33 +226,31 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg, isPaused, startNumber]);
+  }, [phase, roundIdx, cfg, startNumber]);
 
-  // Live Trace Countdown Fuse
+  // Live Trace Countdown Fuse (pause-safe)
   useEffect(() => {
     if (phase !== 'TRACE') return;
 
-    let remaining = cfg.traceMs;
-    traceRemainingMsRef.current = remaining;
+    traceRemainingMsRef.current = cfg.traceMs;
     let lastTick = performance.now();
-    let lastSec = Math.ceil(remaining / 1000);
+    let lastSec = Math.ceil(traceRemainingMsRef.current / 1000);
     let rafId = 0;
 
     const tick = (now: number) => {
-      if (!isPaused) {
+      if (!isPausedRef.current) {
         const dt = Math.min(now - lastTick, 50);
-        remaining = Math.max(0, remaining - dt);
-        traceRemainingMsRef.current = remaining;
-        setTraceProgress(remaining / cfg.traceMs);
+        traceRemainingMsRef.current = Math.max(0, traceRemainingMsRef.current - dt);
+        setTraceProgress(traceRemainingMsRef.current / cfg.traceMs);
 
-        const sec = Math.ceil(remaining / 1000);
+        const sec = Math.ceil(traceRemainingMsRef.current / 1000);
         if (sec !== lastSec) {
           lastSec = sec;
           setTraceSecondsLeft(sec);
           if (sec <= 3 && sec > 0) sound.playUrgentTick();
         }
 
-        if (remaining <= 0) {
+        if (traceRemainingMsRef.current <= 0) {
           streakRef.current = 0;
           setStreak(0);
           sound.playMiss();
@@ -265,7 +265,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg.traceMs, isPaused, advanceRound]);
+  }, [phase, roundIdx, cfg.traceMs, advanceRound]);
 
   const handleCellClick = useCallback(
     (cellIdx: number) => {
@@ -407,8 +407,8 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
     cfg.gridSize === 4
       ? 'w-16 h-16 sm:w-20 sm:h-20'
       : cfg.gridSize === 5
-      ? 'w-14 h-14 sm:w-16 sm:h-16'
-      : 'w-12 h-12 sm:w-14 sm:h-14';
+      ? 'w-[52px] h-[52px] sm:w-16 sm:h-16'
+      : 'w-11 h-11 sm:w-14 sm:h-14';
 
   const revealedCellsSet = useMemo(() => {
     return new Set(currentRoundData.targetTapSequence.slice(0, stepsFound));
@@ -487,7 +487,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
       </div>
 
       {/* Tactile Trail Board */}
-      <div className="relative p-4 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl">
+      <div className="relative p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl">
         <div className="relative">
           {trailPoints && (
             <svg
@@ -509,7 +509,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           )}
 
           <div
-            className="relative z-10 grid gap-2.5 sm:gap-3"
+            className="relative z-10 grid gap-1.5 sm:gap-3"
             style={{
               gridTemplateColumns: `repeat(${cfg.gridSize}, minmax(0, 1fr))`,
             }}

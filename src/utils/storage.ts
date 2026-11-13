@@ -1,7 +1,16 @@
-import { DailyCompletionRecord, DisciplineId, PersonalBest, PlayerProgress } from '../types/game';
+import {
+  DailyCompletionRecord,
+  Difficulty,
+  DisciplineId,
+  PersonalBest,
+  PlayerProgress,
+  SessionLogEntry,
+  StageResult,
+} from '../types/game';
 import { getPreviousDateKey } from './seededRandom';
 
 const STORAGE_KEY = 'mnemon_progress_v1';
+const MAX_HISTORY_ENTRIES = 500;
 
 const DEFAULT_BEST: PersonalBest = {
   bestScore: 0,
@@ -23,9 +32,38 @@ function createDefaultProgress(): PlayerProgress {
       stroop: { ...DEFAULT_BEST },
       pairs: { ...DEFAULT_BEST },
       pulse: { ...DEFAULT_BEST },
+      matrix: { ...DEFAULT_BEST },
+      digitspan: { ...DEFAULT_BEST },
+      cipher: { ...DEFAULT_BEST },
+      ruleswitch: { ...DEFAULT_BEST },
     },
+    sessionHistory: [],
     muted: false,
   };
+}
+
+function backfillHistoryFromDailyRecords(
+  dailyRecords: Record<string, DailyCompletionRecord>
+): SessionLogEntry[] {
+  const entries: SessionLogEntry[] = [];
+  const records = Object.values(dailyRecords).sort((a, b) => a.completedAt - b.completedAt);
+  for (const rec of records) {
+    rec.stages.forEach((stage, idx) => {
+      entries.push({
+        id: `backfill-${rec.dateKey}-${stage.discipline}-${idx}`,
+        dateKey: rec.dateKey,
+        timestamp: rec.completedAt + idx * 1000,
+        mode: 'daily',
+        difficulty: 'standard',
+        discipline: stage.discipline,
+        score: stage.score,
+        avgReactionMs: stage.avgReactionMs,
+        accuracy: stage.accuracy,
+        bestStreak: stage.bestStreak,
+      });
+    });
+  }
+  return entries.slice(-MAX_HISTORY_ENTRIES);
 }
 
 export function loadProgress(): PlayerProgress {
@@ -33,11 +71,16 @@ export function loadProgress(): PlayerProgress {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return createDefaultProgress();
     const parsed = JSON.parse(raw) as Partial<PlayerProgress>;
+    const dailyRecords = parsed.dailyRecords ?? {};
+    const sessionHistory = Array.isArray(parsed.sessionHistory)
+      ? parsed.sessionHistory
+      : backfillHistoryFromDailyRecords(dailyRecords);
+
     return {
       currentStreak: parsed.currentStreak ?? 0,
       bestStreak: parsed.bestStreak ?? 0,
       lastCompletedDate: parsed.lastCompletedDate ?? null,
-      dailyRecords: parsed.dailyRecords ?? {},
+      dailyRecords,
       personalBests: {
         pattern: { ...DEFAULT_BEST, ...parsed.personalBests?.pattern },
         tempo: { ...DEFAULT_BEST, ...parsed.personalBests?.tempo },
@@ -45,7 +88,12 @@ export function loadProgress(): PlayerProgress {
         stroop: { ...DEFAULT_BEST, ...parsed.personalBests?.stroop },
         pairs: { ...DEFAULT_BEST, ...parsed.personalBests?.pairs },
         pulse: { ...DEFAULT_BEST, ...parsed.personalBests?.pulse },
+        matrix: { ...DEFAULT_BEST, ...parsed.personalBests?.matrix },
+        digitspan: { ...DEFAULT_BEST, ...parsed.personalBests?.digitspan },
+        cipher: { ...DEFAULT_BEST, ...parsed.personalBests?.cipher },
+        ruleswitch: { ...DEFAULT_BEST, ...parsed.personalBests?.ruleswitch },
       },
+      sessionHistory,
       muted: Boolean(parsed.muted),
     };
   } catch {
@@ -92,12 +140,25 @@ export function recordDailyCompletion(
 
   for (const stage of record.stages) {
     nextBests[stage.discipline] = mergeDisciplineBest(
-      nextBests[stage.discipline],
+      nextBests[stage.discipline] ?? { ...DEFAULT_BEST },
       stage.score,
       stage.avgReactionMs,
       stage.accuracy
     );
   }
+
+  const newEntries: SessionLogEntry[] = record.stages.map((stage, idx) => ({
+    id: `daily-${record.dateKey}-${record.completedAt}-${stage.discipline}-${idx}`,
+    dateKey: record.dateKey,
+    timestamp: record.completedAt + idx * 1000,
+    mode: 'daily',
+    difficulty: 'standard',
+    discipline: stage.discipline,
+    score: stage.score,
+    avgReactionMs: stage.avgReactionMs,
+    accuracy: stage.accuracy,
+    bestStreak: stage.bestStreak,
+  }));
 
   const existing = progress.dailyRecords[record.dateKey];
   const bestDailyRecord =
@@ -113,6 +174,7 @@ export function recordDailyCompletion(
       [record.dateKey]: bestDailyRecord,
     },
     personalBests: nextBests,
+    sessionHistory: [...progress.sessionHistory, ...newEntries].slice(-MAX_HISTORY_ENTRIES),
   };
 
   saveProgress(updated);
@@ -121,22 +183,36 @@ export function recordDailyCompletion(
 
 export function recordPracticeCompletion(
   progress: PlayerProgress,
-  discipline: DisciplineId,
-  score: number,
-  avgReactionMs: number,
-  accuracy: number
+  result: StageResult,
+  dateKey: string,
+  difficulty: Difficulty
 ): PlayerProgress {
+  const now = Date.now();
+  const entry: SessionLogEntry = {
+    id: `practice-${dateKey}-${now}-${result.discipline}`,
+    dateKey,
+    timestamp: now,
+    mode: 'practice',
+    difficulty,
+    discipline: result.discipline,
+    score: result.score,
+    avgReactionMs: result.avgReactionMs,
+    accuracy: result.accuracy,
+    bestStreak: result.bestStreak,
+  };
+
   const updated: PlayerProgress = {
     ...progress,
     personalBests: {
       ...progress.personalBests,
-      [discipline]: mergeDisciplineBest(
-        progress.personalBests[discipline],
-        score,
-        avgReactionMs,
-        accuracy
+      [result.discipline]: mergeDisciplineBest(
+        progress.personalBests[result.discipline] ?? { ...DEFAULT_BEST },
+        result.score,
+        result.avgReactionMs,
+        result.accuracy
       ),
     },
+    sessionHistory: [...progress.sessionHistory, entry].slice(-MAX_HISTORY_ENTRIES),
   };
   saveProgress(updated);
   return updated;

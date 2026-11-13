@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ArrowRight, CheckCircle2, Play, ShieldAlert, Sparkles, Sun } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Home, Play, ShieldAlert, Sparkles, Sun } from 'lucide-react';
 import { DISCIPLINES, Difficulty, DisciplineId, GameMode } from '../types/game';
 
 interface StageBriefingProps {
@@ -10,6 +10,7 @@ interface StageBriefingProps {
   totalStages: number;
   isOverlayHelp?: boolean;
   onStartStage: () => void;
+  onMenu?: () => void;
 }
 
 export const StageBriefing: React.FC<StageBriefingProps> = ({
@@ -20,6 +21,7 @@ export const StageBriefing: React.FC<StageBriefingProps> = ({
   totalStages,
   isOverlayHelp = false,
   onStartStage,
+  onMenu,
 }) => {
   const meta = DISCIPLINES[discipline];
 
@@ -40,12 +42,12 @@ export const StageBriefing: React.FC<StageBriefingProps> = ({
         isOverlayHelp
           ? 'fixed inset-0 z-40 bg-[#0B111E]/85'
           : 'w-full h-full'
-      } flex items-center justify-center p-4`}
+      } flex items-center justify-center p-3 sm:p-4`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="briefing-title"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-[#131C2E] border border-white/15 p-6 sm:p-7 shadow-2xl animate-modal-enter space-y-5">
+      <div className="w-full max-w-lg max-h-[88dvh] overflow-y-auto overscroll-contain clean-scroll rounded-2xl bg-[#131C2E] border border-white/15 p-5 sm:p-7 shadow-2xl animate-modal-enter space-y-4 sm:space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-medium text-teal-400">
@@ -65,12 +67,12 @@ export const StageBriefing: React.FC<StageBriefingProps> = ({
         </div>
 
         <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10">
-          <div className="text-[11px] font-medium text-slate-400 mb-2.5">
+          <div className="text-[11px] font-medium text-slate-400 mb-2">
             What Is Needed to Clear This Stage
           </div>
-          <ul className="space-y-2.5">
+          <ul className="space-y-2">
             {meta.whatIsNeeded.map((item, idx) => (
-              <li key={idx} className="flex items-start gap-2.5 text-sm text-slate-200 leading-snug">
+              <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-200 leading-snug">
                 <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" aria-hidden="true" />
                 <span>{item}</span>
               </li>
@@ -198,30 +200,110 @@ export const StageBriefing: React.FC<StageBriefingProps> = ({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-4 pt-1">
+        {discipline === 'matrix' && (
+          <div className="grid grid-cols-2 gap-2.5 text-xs">
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+              <div className="font-mono text-teal-400 font-semibold">3 Visual Rules</div>
+              <div className="text-slate-300 mt-0.5">
+                Track Shape, Fill Style, and Count across rows &amp; columns
+              </div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+              <div className="font-mono text-amber-300 font-semibold">Missing ? Tile</div>
+              <div className="text-slate-300 mt-0.5">
+                Pick 1 of 4 candidates (Keys 1–4) before timer expires
+              </div>
+            </div>
+          </div>
+        )}
+
+        {discipline === 'digitspan' && (
+          <div className="grid grid-cols-2 gap-2.5 text-xs">
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+              <div className="font-mono text-teal-400 font-semibold">Rounds 1–3 · Forward</div>
+              <div className="text-slate-300 mt-0.5">
+                Enter digits in exact flash order (e.g. 4-9-2 → 492)
+              </div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-amber-400/25">
+              <div className="font-mono text-amber-300 font-semibold">Rounds 4–5 · Reverse</div>
+              <div className="text-slate-300 mt-0.5">
+                Flip your memory buffer backwards (4-9-2 → 294)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {discipline === 'cipher' && (
+          <div className="grid grid-cols-2 gap-2.5 text-xs">
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+              <div className="font-mono text-teal-400 font-semibold">5-Term Series</div>
+              <div className="text-slate-300 mt-0.5">
+                Find arithmetic steps, alternating ops, or interleaved tracks
+              </div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+              <div className="font-mono text-amber-300 font-semibold">Pattern Clue (H)</div>
+              <div className="text-slate-300 mt-0.5">
+                Stuck? Use Hint to reveal the rule family &amp; cut 1 decoy
+              </div>
+            </div>
+          </div>
+        )}
+
+        {discipline === 'ruleswitch' && (
+          <div className="grid grid-cols-2 gap-2.5 text-xs">
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+              <div className="font-mono text-teal-400 font-semibold">Hidden Sort Rule</div>
+              <div className="text-slate-300 mt-0.5">
+                Match active card to 1–4 by Shape, Count, or Finish
+              </div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-amber-400/25">
+              <div className="font-mono text-amber-300 font-semibold">Silent Shifts</div>
+              <div className="text-slate-300 mt-0.5">
+                Rule rotates every 4–5 matches — adapt immediately!
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-4 pt-0.5">
           <span className="text-xs text-slate-400 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
             <span>{meta.controlsHint}</span>
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={onStartStage}
-          className="w-full h-12 rounded-xl bg-amber-400 hover:bg-amber-300 active:scale-[0.99] text-slate-950 font-semibold text-sm inline-flex items-center justify-center gap-2 transition-transform cursor-pointer"
-        >
-          {isOverlayHelp ? (
-            <>
-              <Play className="w-4 h-4 fill-current" aria-hidden="true" />
-              <span>Resume Stage</span>
-            </>
-          ) : (
-            <>
-              <span>Begin {meta.title} (Space)</span>
-              <ArrowRight className="w-4 h-4" aria-hidden="true" />
-            </>
+        <div className="flex gap-2.5">
+          {onMenu && (
+            <button
+              type="button"
+              onClick={onMenu}
+              className="h-12 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 font-medium text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Home className="w-4 h-4" aria-hidden="true" />
+              <span>Menu</span>
+            </button>
           )}
-        </button>
+          <button
+            type="button"
+            onClick={onStartStage}
+            className="flex-1 h-12 rounded-xl bg-amber-400 hover:bg-amber-300 active:scale-[0.99] text-slate-950 font-semibold text-sm inline-flex items-center justify-center gap-2 transition-transform cursor-pointer"
+          >
+            {isOverlayHelp ? (
+              <>
+                <Play className="w-4 h-4 fill-current" aria-hidden="true" />
+                <span>Resume Stage</span>
+              </>
+            ) : (
+              <>
+                <span>Begin {meta.title}</span>
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

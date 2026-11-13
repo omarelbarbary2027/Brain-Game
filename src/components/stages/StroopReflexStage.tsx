@@ -157,11 +157,13 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
   const pauseStartRef = useRef<number | null>(null);
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
+  const isPausedRef = useRef(isPaused);
 
   const current = prompts[idx];
   const fuseMs = getFuseMs(difficulty, current.directive, idx, shiftIdx);
 
   useEffect(() => {
+    isPausedRef.current = isPaused;
     if (isPaused) {
       pauseStartRef.current = performance.now();
     } else if (pauseStartRef.current !== null) {
@@ -262,7 +264,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
     let rafId = 0;
 
     const tick = (now: number) => {
-      if (!isPaused && !lockRef.current) {
+      if (!isPausedRef.current && !lockRef.current) {
         const dt = Math.min(now - lastTick, 50);
         remaining = Math.max(0, remaining - dt);
         setFuseProgress(remaining / fuseMs);
@@ -277,7 +279,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, idx, fuseMs, isPaused, handleTimeout]);
+  }, [phase, idx, fuseMs, handleTimeout]);
 
   const handlePick = useCallback(
     (choice: ColorId) => {
@@ -413,7 +415,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
         ) : (
           <div
             key={current.id}
-            className="w-full rounded-2xl bg-[#131C2E] border-2 border-white/15 p-7 shadow-2xl flex flex-col items-center justify-between gap-5 animate-card-enter"
+            className="w-full rounded-2xl bg-[#131C2E] border-2 border-white/15 p-5 sm:p-7 shadow-2xl flex flex-col items-center justify-between gap-4 sm:gap-5 animate-card-enter"
           >
             <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider">
               <span
@@ -427,9 +429,9 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
               </span>
             </div>
 
-            <div className="py-3 flex items-center justify-center gap-3">
+            <div className="py-2 sm:py-3 flex items-center justify-center gap-3">
               <span
-                className={`font-display text-5xl sm:text-6xl font-bold tracking-tight uppercase ${inkMeta.textClass}`}
+                className={`font-display text-4xl sm:text-6xl font-bold tracking-tight uppercase ${inkMeta.textClass}`}
               >
                 {current.word}
               </span>

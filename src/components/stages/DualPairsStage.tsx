@@ -115,12 +115,14 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
   const remainingMatchMsRef = useRef(0);
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
+  const isPausedRef = useRef(isPaused);
 
   const cfg = configs[roundIdx];
   const deck = decks[roundIdx];
   const pairCount = deck.length / 2;
 
   useEffect(() => {
+    isPausedRef.current = isPaused;
     if (isPaused) {
       pauseStartRef.current = performance.now();
     } else if (pauseStartRef.current !== null) {
@@ -191,7 +193,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
     [roundIdx, totalRounds, finishStage]
   );
 
-  // Study timer
+  // Study timer (pause-safe)
   useEffect(() => {
     if (phase !== 'STUDY') return;
     setStudyProgress(1);
@@ -202,7 +204,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
     let rafId = 0;
 
     const tick = (now: number) => {
-      if (!isPaused) {
+      if (!isPausedRef.current) {
         const dt = Math.min(now - lastTick, 50);
         remaining = Math.max(0, remaining - dt);
         setStudyProgress(remaining / cfg.studyMs);
@@ -223,32 +225,30 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg, pairCount, isPaused]);
+  }, [phase, roundIdx, cfg, pairCount]);
 
-  // Match countdown timer
+  // Match countdown timer (pause-safe)
   useEffect(() => {
     if (phase !== 'MATCH') return;
-    let remaining = cfg.matchMs;
-    remainingMatchMsRef.current = remaining;
+    remainingMatchMsRef.current = cfg.matchMs;
     let lastTick = performance.now();
-    let lastSec = Math.ceil(remaining / 1000);
+    let lastSec = Math.ceil(remainingMatchMsRef.current / 1000);
     let rafId = 0;
 
     const tick = (now: number) => {
-      if (!isPaused) {
+      if (!isPausedRef.current) {
         const dt = Math.min(now - lastTick, 50);
-        remaining = Math.max(0, remaining - dt);
-        remainingMatchMsRef.current = remaining;
-        setMatchProgress(remaining / cfg.matchMs);
+        remainingMatchMsRef.current = Math.max(0, remainingMatchMsRef.current - dt);
+        setMatchProgress(remainingMatchMsRef.current / cfg.matchMs);
 
-        const sec = Math.ceil(remaining / 1000);
+        const sec = Math.ceil(remainingMatchMsRef.current / 1000);
         if (sec !== lastSec) {
           lastSec = sec;
           setSecondsLeft(sec);
           if (sec <= 3 && sec > 0) sound.playUrgentTick();
         }
 
-        if (remaining <= 0) {
+        if (remainingMatchMsRef.current <= 0) {
           streakRef.current = 0;
           setStreak(0);
           sound.playMiss();
@@ -263,7 +263,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg.matchMs, isPaused, advanceRound]);
+  }, [phase, roundIdx, cfg.matchMs, advanceRound]);
 
   const handleCardClick = useCallback(
     (idx: number) => {
@@ -420,9 +420,9 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
       </div>
 
       {/* Card Grid */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl">
+      <div className="p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl">
         <div
-          className="grid gap-2.5 sm:gap-3"
+          className="grid gap-2 sm:gap-3"
           style={{ gridTemplateColumns: `repeat(${cfg.cols}, minmax(0, 1fr))` }}
         >
           {deck.map((card, idx) => {
@@ -441,7 +441,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
                 disabled={phase !== 'MATCH' || isMatched || isFlipped}
                 onClick={() => handleCardClick(idx)}
                 aria-label={isFaceUp ? card.label : `Face-down card ${idx + 1}`}
-                className={`relative w-16 h-20 sm:w-20 sm:h-24 rounded-xl flex flex-col items-center justify-center gap-1 transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ${
+                className={`relative w-[68px] h-[78px] sm:w-20 sm:h-24 rounded-xl flex flex-col items-center justify-center gap-1 transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ${
                   isMatched
                     ? 'bg-[#F8FAFC] text-slate-900 border-2 border-teal-400 border-b-4 shadow-lg animate-tile-pop'
                     : isMismatch
