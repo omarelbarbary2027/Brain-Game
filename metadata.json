@@ -1,0 +1,6 @@
+{
+  "name": "Mnemon",
+  "description": "Daily memory and cognitive speed puzzle game featuring spatial recall, rapid N-back symbol matching, and sequential pathfinding.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
