@@ -31,8 +31,8 @@ function generateSpanRounds(seed: string, difficulty: Difficulty): SpanRound[] {
       ? [5, 6, 7, 6, 7]
       : [4, 5, 6, 5, 6];
 
-  const flashMs = difficulty === 'relaxed' ? 760 : difficulty === 'master' ? 470 : 610;
-  const baseInputMs = difficulty === 'relaxed' ? 16000 : difficulty === 'master' ? 10500 : 13000;
+  const flashMs = difficulty === 'relaxed' ? 950 : difficulty === 'master' ? 620 : 780;
+  const baseInputMs = difficulty === 'relaxed' ? 20000 : difficulty === 'master' ? 13000 : 16000;
 
   return lengths.map((len, idx) => {
     const digits: number[] = [];
@@ -98,6 +98,8 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  const arRef = useRef(ar);
+  arRef.current = ar;
 
   const currentRound = rounds[roundIdx];
 
@@ -194,7 +196,7 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
 
   useEffect(() => {
     if (phase !== 'RULE_SHIFT') return;
-    let remaining = 2200;
+    let remaining = 3200;
     let lastTick = performance.now();
     let rafId = 0;
 
@@ -217,7 +219,7 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
 
   useEffect(() => {
     if (phase !== 'FLASH') return;
-    const gapMs = 115;
+    const gapMs = 150;
     const stepTotal = currentRound.flashMs + gapMs;
     const totalFlashDuration = currentRound.digits.length * stepTotal;
 
@@ -273,12 +275,12 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
     sound.playMiss();
     setRoundOutcome({
       correct: false,
-      text: ar
+      text: arRef.current
         ? `انتهى الوقت · الإجابة ${currentRound.expected.join('')}`
         : `Time expired · Expected ${currentRound.expected.join('')}`,
     });
     goNextRound(1200);
-  }, [phase, currentRound.expected, goNextRound, ar]);
+  }, [phase, currentRound.expected, goNextRound]);
 
   useEffect(() => {
     if (phase !== 'INPUT') return;
@@ -430,7 +432,7 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
   }, [phase, beginFromShift, handleDigitPress, handleBackspace, handleClear, handleUseHint]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Round Header & Reverse Mode Banner */}
       <div className="w-full max-w-md mb-3 sm:mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">

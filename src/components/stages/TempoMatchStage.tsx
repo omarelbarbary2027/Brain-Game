@@ -67,8 +67,8 @@ const FINISH_STYLES: Record<
 };
 
 function getCardFuseMs(difficulty: Difficulty, rule: MatchRule): number {
-  const base = difficulty === 'relaxed' ? 3200 : difficulty === 'master' ? 1650 : 2250;
-  return rule === 'shape2' ? base + 350 : base;
+  const base = difficulty === 'relaxed' ? 4500 : difficulty === 'master' ? 2600 : 3400;
+  return rule === 'shape2' ? base + 550 : base;
 }
 
 function generateDeck(seed: string, difficulty: Difficulty): {
@@ -264,11 +264,20 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
   const isPausedRef = useRef(isPaused);
+  const arRef = useRef(ar);
+  arRef.current = ar;
+  const timerRef = useRef<number | null>(null);
 
   const currentCard = deck[cardIdx];
   const targetLookback = currentCard.rule === 'shape2' ? 2 : 1;
   const referenceCard = cardIdx >= targetLookback ? deck[cardIdx - targetLookback] : null;
   const fuseMs = getCardFuseMs(difficulty, currentCard.rule);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -305,7 +314,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
 
   useEffect(() => {
     if (phase !== 'ANCHOR' || isPaused) return;
-    const t = setTimeout(startFromAnchor, 1700);
+    const t = setTimeout(startFromAnchor, 2800);
     return () => clearTimeout(t);
   }, [phase, isPaused, startFromAnchor]);
 
@@ -318,7 +327,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
 
   useEffect(() => {
     if (phase !== 'RULE_SHIFT' || isPaused) return;
-    const waitMs = currentCard.rule === 'shape2' ? 2400 : 1500;
+    const waitMs = currentCard.rule === 'shape2' ? 3800 : 3000;
     const t = setTimeout(resumeAfterShift, waitMs);
     return () => clearTimeout(t);
   }, [phase, isPaused, currentCard.rule, resumeAfterShift]);
@@ -375,9 +384,10 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
     streakRef.current = 0;
     setStreak(0);
     sound.playMiss();
-    setFeedback({ correct: false, text: ar ? 'انتهى الوقت' : 'Time expired' });
-    setTimeout(advanceCard, 220);
-  }, [phase, advanceCard, ar]);
+    setFeedback({ correct: false, text: arRef.current ? 'انتهى الوقت' : 'Time expired' });
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(advanceCard, 260);
+  }, [phase, advanceCard]);
 
   useEffect(() => {
     if (phase !== 'ACTIVE') return;
@@ -453,7 +463,8 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
         });
       }
 
-      setTimeout(advanceCard, 150);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(advanceCard, 180);
     },
     [isPaused, phase, currentCard, advanceCard, ar]
   );
@@ -514,7 +525,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
   const prev1Card = cardIdx >= 1 ? deck[cardIdx - 1] : null;
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Progress & Rule Banner */}
       <div className="w-full max-w-md mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-2">
@@ -658,7 +669,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
             <div
               key={currentCard.id}
               className={`relative ${
-                peekVisible ? 'w-52 sm:w-64' : 'w-60 sm:w-64'
+                peekVisible ? 'w-44 sm:w-64' : 'w-60 sm:w-64'
               } h-60 sm:h-72 rounded-2xl border-2 shadow-2xl flex flex-col items-center justify-between p-4 sm:p-5 animate-card-enter ${finishStyle.bg} ${finishStyle.border}`}
             >
               <div className="w-full flex items-center justify-between">

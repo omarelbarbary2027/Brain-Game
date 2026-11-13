@@ -34,25 +34,25 @@ type Phase = 'MEMORIZE' | 'RECALL' | 'ROUND_END';
 function getRoundConfigs(difficulty: Difficulty): RoundConfig[] {
   if (difficulty === 'relaxed') {
     return [
-      { gridSize: 4, targetCount: 4, decoyCount: 0, studyMs: 2400, recallMs: 14000 },
-      { gridSize: 4, targetCount: 5, decoyCount: 1, studyMs: 2400, recallMs: 14000 },
-      { gridSize: 5, targetCount: 5, decoyCount: 2, studyMs: 2500, recallMs: 15000 },
-      { gridSize: 5, targetCount: 6, decoyCount: 2, studyMs: 2600, recallMs: 15000 },
+      { gridSize: 4, targetCount: 4, decoyCount: 0, studyMs: 3400, recallMs: 18000 },
+      { gridSize: 4, targetCount: 5, decoyCount: 1, studyMs: 3500, recallMs: 19000 },
+      { gridSize: 5, targetCount: 5, decoyCount: 2, studyMs: 3800, recallMs: 20000 },
+      { gridSize: 5, targetCount: 6, decoyCount: 2, studyMs: 4000, recallMs: 21000 },
     ];
   }
   if (difficulty === 'master') {
     return [
-      { gridSize: 4, targetCount: 5, decoyCount: 2, studyMs: 1550, recallMs: 8500 },
-      { gridSize: 5, targetCount: 6, decoyCount: 3, studyMs: 1650, recallMs: 9000 },
-      { gridSize: 5, targetCount: 7, decoyCount: 3, studyMs: 1750, recallMs: 9500 },
-      { gridSize: 6, targetCount: 9, decoyCount: 4, studyMs: 1900, recallMs: 11000 },
+      { gridSize: 4, targetCount: 5, decoyCount: 2, studyMs: 2100, recallMs: 11500 },
+      { gridSize: 5, targetCount: 6, decoyCount: 3, studyMs: 2300, recallMs: 12500 },
+      { gridSize: 5, targetCount: 7, decoyCount: 3, studyMs: 2500, recallMs: 13500 },
+      { gridSize: 6, targetCount: 9, decoyCount: 4, studyMs: 2700, recallMs: 14500 },
     ];
   }
   return [
-    { gridSize: 4, targetCount: 4, decoyCount: 0, studyMs: 1900, recallMs: 10500 },
-    { gridSize: 4, targetCount: 5, decoyCount: 2, studyMs: 2000, recallMs: 11000 },
-    { gridSize: 5, targetCount: 6, decoyCount: 3, studyMs: 2150, recallMs: 11500 },
-    { gridSize: 6, targetCount: 8, decoyCount: 3, studyMs: 2300, recallMs: 12500 },
+    { gridSize: 4, targetCount: 4, decoyCount: 0, studyMs: 2700, recallMs: 14000 },
+    { gridSize: 4, targetCount: 5, decoyCount: 2, studyMs: 2900, recallMs: 15000 },
+    { gridSize: 5, targetCount: 6, decoyCount: 3, studyMs: 3150, recallMs: 16000 },
+    { gridSize: 6, targetCount: 8, decoyCount: 3, studyMs: 3400, recallMs: 17000 },
   ];
 }
 
@@ -118,9 +118,18 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
   const recallRemainingMsRef = useRef(0);
   const studyElapsedRef = useRef(0);
   const isPausedRef = useRef(isPaused);
+  const arRef = useRef(ar);
+  arRef.current = ar;
+  const timerRef = useRef<number | null>(null);
 
   const currentCfg = configs[roundIdx];
   const currentData = roundData[roundIdx];
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -176,7 +185,8 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
   const advanceToNextRound = useCallback(
     (delayMs: number) => {
       setPhase('ROUND_END');
-      setTimeout(() => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => {
         if (roundIdx + 1 >= totalRounds) {
           finishStage();
         } else {
@@ -200,7 +210,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
     setStudyProgress(1);
     setWaveRevealedCount(0);
     setStatusNote(
-      ar
+      arRef.current
         ? currentCfg.decoyCount > 0
           ? `احفظ ${currentCfg.targetCount} مربعات ذهبية وتجاهل ${currentCfg.decoyCount} علامة وردية`
           : `احفظ مواقع ${currentCfg.targetCount} مربعات ذهبية`
@@ -212,7 +222,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
     let lastTick = performance.now();
     let rafId = 0;
     let lastWaveStep = 0;
-    const waveWindow = Math.min(currentCfg.studyMs * 0.45, currentCfg.targetCount * 110);
+    const waveWindow = Math.min(currentCfg.studyMs * 0.45, currentCfg.targetCount * 140);
 
     const tick = (now: number) => {
       if (!isPausedRef.current) {
@@ -242,7 +252,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
           recallRemainingMsRef.current = currentCfg.recallMs;
           setRecallSecondsLeft(Math.ceil(currentCfg.recallMs / 1000));
           setStatusNote(
-            ar ? 'اضغط مواضع المربعات الذهبية فقط' : 'Tap only the Gold tile positions'
+            arRef.current ? 'اضغط مواضع المربعات الذهبية فقط' : 'Tap only the Gold tile positions'
           );
           lastEventTimeRef.current = performance.now();
           sound.playTick();
@@ -255,7 +265,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, currentCfg, ar]);
+  }, [phase, roundIdx, currentCfg]);
 
   useEffect(() => {
     if (phase !== 'RECALL') return;
@@ -285,7 +295,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
           setStreak(0);
           sound.playMiss();
           setStatusNote(
-            ar ? 'انتهى الوقت — مراجعة المواقع الفائتة' : 'Time expired — reviewing missed pattern'
+            arRef.current ? 'انتهى الوقت — مراجعة المواقع الفائتة' : 'Time expired — reviewing missed pattern'
           );
           advanceToNextRound(1100);
           return;
@@ -297,7 +307,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, currentCfg.recallMs, advanceToNextRound, ar]);
+  }, [phase, roundIdx, currentCfg.recallMs, advanceToNextRound]);
 
   const handleTileSelect = useCallback(
     (idx: number) => {
@@ -457,7 +467,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
   }, [currentData, waveRevealedCount]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Phase, Goal & Fuse Header */}
       <div className="w-full max-w-md mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-2">
@@ -522,12 +532,12 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
       {/* Tactile Keycap Board (kept LTR for stable arrow-key stepping) */}
       <div
         dir="ltr"
-        className="p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl"
+        className="p-2.5 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl"
         role="grid"
         aria-label={ar ? 'شبكة ذاكرة النمط' : 'Pattern Echo memory grid'}
       >
         <div
-          className="grid gap-1.5 sm:gap-3"
+          className="grid gap-1 sm:gap-3"
           style={{
             gridTemplateColumns: `repeat(${currentCfg.gridSize}, minmax(0, 1fr))`,
           }}

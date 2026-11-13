@@ -87,8 +87,8 @@ const ColorShapeIcon: React.FC<{ id: ColorId; size?: number }> = ({ id, size = 1
 };
 
 function getFuseMs(difficulty: Difficulty, directive: StroopDirective, idx: number, shiftIdx: number): number {
-  const base = difficulty === 'relaxed' ? 2700 : difficulty === 'master' ? 1450 : 1950;
-  return idx >= shiftIdx ? base + (directive === 'word' ? 150 : 100) : base;
+  const base = difficulty === 'relaxed' ? 4000 : difficulty === 'master' ? 2300 : 3000;
+  return idx >= shiftIdx ? base + (directive === 'word' ? 300 : 200) : base;
 }
 
 function generatePrompts(seed: string, difficulty: Difficulty): {
@@ -166,14 +166,23 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
   const isPausedRef = useRef(isPaused);
+  const arRef = useRef(ar);
+  arRef.current = ar;
+  const timerRef = useRef<number | null>(null);
 
   const current = prompts[idx];
   const fuseMs = getFuseMs(difficulty, current.directive, idx, shiftIdx);
 
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
+
   const colorLabel = useCallback(
-    (id: ColorId) => {
+    (id: ColorId, useAr = ar) => {
       const meta = COLORS.find((c) => c.id === id)!;
-      return ar ? meta.arLabel : meta.label;
+      return useAr ? meta.arLabel : meta.label;
     },
     [ar]
   );
@@ -238,7 +247,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
 
   useEffect(() => {
     if (phase !== 'RULE_SHIFT' || isPaused) return;
-    const t = setTimeout(resumeAfterShift, 1800);
+    const t = setTimeout(resumeAfterShift, 3200);
     return () => clearTimeout(t);
   }, [phase, isPaused, resumeAfterShift]);
 
@@ -267,14 +276,16 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
     streakRef.current = 0;
     setStreak(0);
     sound.playMiss();
+    const isAr = arRef.current;
+    const meta = COLORS.find((c) => c.id === current.answer)!;
+    const label = isAr ? meta.arLabel : meta.label;
     setFeedback({
       correct: false,
-      text: ar
-        ? `انتهى الوقت · المطلوب ${colorLabel(current.answer)}`
-        : `Time expired · Answer was ${colorLabel(current.answer)}`,
+      text: isAr ? `انتهى الوقت · المطلوب ${label}` : `Time expired · Answer was ${label}`,
     });
-    setTimeout(advanceNext, 260);
-  }, [phase, current.answer, advanceNext, ar, colorLabel]);
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(advanceNext, 320);
+  }, [phase, current.answer, advanceNext]);
 
   useEffect(() => {
     if (phase !== 'ACTIVE') return;
@@ -341,7 +352,8 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
         });
       }
 
-      setTimeout(advanceNext, 160);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(advanceNext, 180);
     },
     [isPaused, phase, eliminated, current.answer, idx, shiftIdx, advanceNext, ar, colorLabel]
   );
@@ -389,7 +401,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
   const wordMeta = COLORS.find((c) => c.id === current.word)!;
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Progress & Directive */}
       <div className="w-full max-w-md mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-2">

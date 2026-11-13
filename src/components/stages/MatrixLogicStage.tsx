@@ -275,7 +275,7 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
 
   const puzzles = useMemo(() => generateMatrixPuzzles(seed, difficulty), [seed, difficulty]);
   const total = puzzles.length;
-  const fuseMs = difficulty === 'relaxed' ? 16000 : difficulty === 'master' ? 8500 : 11500;
+  const fuseMs = difficulty === 'relaxed' ? 22000 : difficulty === 'master' ? 12000 : 16000;
 
   const [idx, setIdx] = useState(0);
   const [fuseProgress, setFuseProgress] = useState(1);
@@ -302,6 +302,8 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  const arRef = useRef(ar);
+  arRef.current = ar;
 
   const current = puzzles[idx];
 
@@ -387,12 +389,12 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
     sound.playMiss();
     setFeedback({
       correct: false,
-      text: ar
+      text: arRef.current
         ? `انتهى الوقت · الخيار الصحيح #${current.answerOptionIndex + 1}`
         : `Time expired · Correct tile was #${current.answerOptionIndex + 1}`,
     });
     timerRef.current = window.setTimeout(advanceNext, 750);
-  }, [current.answerOptionIndex, advanceNext, ar]);
+  }, [current.answerOptionIndex, advanceNext]);
 
   useEffect(() => {
     remainingMsRef.current = fuseMs;
@@ -508,7 +510,7 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
   }, [handleSelectOption, handleUseHint]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-3 sm:px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Progress & Timer */}
       <div className="w-full max-w-md mb-3 sm:mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">

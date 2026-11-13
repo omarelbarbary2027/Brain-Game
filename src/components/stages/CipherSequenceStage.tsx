@@ -44,8 +44,9 @@ function buildCipherSeries(
 
   if (kind === 0) {
     const desc = difficulty !== 'relaxed' && rng() < 0.3;
-    const step = randInt(3, difficulty === 'master' ? 16 : 11, rng) * (desc ? -1 : 1);
-    const start = desc ? randInt(48, 86, rng) : randInt(2, 24, rng);
+    const absStep = randInt(3, difficulty === 'master' ? 16 : 11, rng);
+    const step = absStep * (desc ? -1 : 1);
+    const start = desc ? 4 * absStep + randInt(4, 24, rng) : randInt(2, 24, rng);
     const terms = Array.from({ length: 5 }, (_, n) => start + n * step);
     const stepTxt = step >= 0 ? `+${step}` : `${step}`;
     return {
@@ -129,10 +130,11 @@ function buildCipherSeries(
     const b0 = randInt(20, 46, rng);
     const stepB = randInt(-6, -2, rng);
     const terms = [a0, b0, a0 + stepA, b0 + stepB, a0 + 2 * stepA];
+    const safeMissing = 4;
     return {
       terms,
-      missingIndex,
-      answer: terms[missingIndex],
+      missingIndex: safeMissing,
+      answer: terms[safeMissing],
       clue: 'Two interleaved tracks (1st/3rd/5th and 2nd/4th)',
       clueAr: 'مساران متداخلان (المواقع 1 و3 و5 معاً، و2 و4 معاً)',
     };
@@ -206,7 +208,7 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
 
   const puzzles = useMemo(() => generateCipherPuzzles(seed, difficulty), [seed, difficulty]);
   const total = puzzles.length;
-  const fuseMs = difficulty === 'relaxed' ? 15000 : difficulty === 'master' ? 8000 : 11000;
+  const fuseMs = difficulty === 'relaxed' ? 20000 : difficulty === 'master' ? 11000 : 15000;
 
   const [idx, setIdx] = useState(0);
   const [fuseProgress, setFuseProgress] = useState(1);
@@ -234,6 +236,8 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  const arRef = useRef(ar);
+  arRef.current = ar;
 
   const current = puzzles[idx];
 
@@ -320,12 +324,12 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
     sound.playMiss();
     setFeedback({
       correct: false,
-      text: ar
+      text: arRef.current
         ? `انتهى الوقت · الرقم المفقود ${current.answer}`
         : `Time expired · Missing value was ${current.answer}`,
     });
     timerRef.current = window.setTimeout(advanceNext, 750);
-  }, [current.answer, current.answerOptionIndex, advanceNext, ar]);
+  }, [current.answer, current.answerOptionIndex, advanceNext]);
 
   useEffect(() => {
     remainingMsRef.current = fuseMs;
@@ -442,7 +446,7 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
   }, [handleSelectOption, handleUseHint]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-3 sm:px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Progress & Timer */}
       <div className="w-full max-w-md mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">

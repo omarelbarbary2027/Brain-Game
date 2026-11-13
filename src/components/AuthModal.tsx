@@ -87,6 +87,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div className="w-full max-w-md rounded-2xl bg-[#131C2E] border border-white/15 p-5 sm:p-6 shadow-2xl space-y-5 animate-modal-enter max-h-[90dvh] overflow-y-auto clean-scroll">
         <div className="flex items-start justify-between gap-3">

@@ -197,7 +197,7 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
     [seed, difficulty]
   );
   const total = cards.length;
-  const fuseMs = difficulty === 'relaxed' ? 4600 : difficulty === 'master' ? 2350 : 3300;
+  const fuseMs = difficulty === 'relaxed' ? 6500 : difficulty === 'master' ? 3500 : 4800;
 
   const [idx, setIdx] = useState(0);
   const [activeRule, setActiveRule] = useState<SortRule>(initialRule);
@@ -226,6 +226,8 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  const arRef = useRef(ar);
+  arRef.current = ar;
 
   const current = cards[idx];
   const expectedRefIdx = getExpectedRefIndex(current, activeRule);
@@ -309,12 +311,12 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
     sound.playMiss();
     setFeedback({
       correct: false,
-      text: ar
+      text: arRef.current
         ? 'انتهى الوقت — لاحظ الخاصية المطابقة'
         : 'Time expired — watch the matching attribute',
     });
-    timerRef.current = window.setTimeout(advanceCard, 340);
-  }, [advanceCard, ar]);
+    timerRef.current = window.setTimeout(advanceCard, 360);
+  }, [advanceCard]);
 
   useEffect(() => {
     remainingMsRef.current = fuseMs;
@@ -369,6 +371,7 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
           ruleMatchesRef.current = 0;
           ruleCursorRef.current = (ruleCursorRef.current + 1) % ruleOrder.length;
           setActiveRule(ruleOrder[ruleCursorRef.current]);
+          setRuleHintShown(false);
           setRuleJustShiftedNote(true);
           sound.playRuleShift();
           setFeedback({
@@ -440,7 +443,7 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
   const currentFinishMeta = FINISH_META[current.finish];
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-3 sm:px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Header Progress */}
       <div className="w-full max-w-md mb-3 sm:mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">

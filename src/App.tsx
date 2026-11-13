@@ -87,6 +87,8 @@ export default function App() {
 
   const [stageIndex, setStageIndex] = useState(0);
   const [stageResults, setStageResults] = useState<StageResult[]>([]);
+  const [newBestDisciplines, setNewBestDisciplines] = useState<Set<string>>(() => new Set());
+  const [lastPrevBestScore, setLastPrevBestScore] = useState<number>(0);
   const [runSeed, setRunSeed] = useState<string>(todayKey);
   const [runKey, setRunKey] = useState<number>(1);
   const [hud, setHud] = useState<LiveStageHud>(INITIAL_HUD);
@@ -199,6 +201,8 @@ export default function App() {
       setRunSeed(seed);
       setStageIndex(0);
       setStageResults([]);
+      setNewBestDisciplines(new Set());
+      setLastPrevBestScore(0);
       setHud(INITIAL_HUD);
       setShowRulesHelp(false);
       setRunKey((k) => k + 1);
@@ -227,6 +231,16 @@ export default function App() {
 
   const handleStageComplete = useCallback(
     (result: StageResult) => {
+      const prevBest = progress.personalBests[result.discipline]?.bestScore ?? 0;
+      setLastPrevBestScore(prevBest);
+      if (result.score > 0 && result.score > prevBest) {
+        setNewBestDisciplines((prev) => {
+          const next = new Set(prev);
+          next.add(result.discipline);
+          return next;
+        });
+      }
+
       const nextResults = [...stageResults, result];
       setStageResults(nextResults);
 
@@ -308,6 +322,7 @@ export default function App() {
       }
     },
     [
+      progress.personalBests,
       stageResults,
       stageIndex,
       stageQueue.length,
@@ -384,6 +399,7 @@ export default function App() {
           onSelectMode={setSelectedMode}
           onSelectDifficulty={setSelectedDifficulty}
           onStart={startNewRun}
+          onQuickLaunchDiscipline={startRunForMode}
           onViewTodayResult={handleViewTodayResult}
           onOpenDashboard={() => setGameState('DASHBOARD')}
           onToggleMute={handleToggleMute}
@@ -421,7 +437,7 @@ export default function App() {
             onPause={handlePauseToggle}
           />
 
-          <div className="flex-1 w-full pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] flex items-center justify-center overflow-y-auto overscroll-contain clean-scroll">
+          <div className="flex-1 min-h-0 w-full pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] flex flex-col overflow-y-auto overscroll-contain clean-scroll">
             {gameState === 'STAGE_BRIEFING' ? (
               <StageBriefing
                 discipline={currentDiscipline}
@@ -429,6 +445,8 @@ export default function App() {
                 difficulty={activeDifficulty}
                 stageIndex={stageIndex}
                 totalStages={stageQueue.length}
+                personalBestScore={progress.personalBests[currentDiscipline]?.bestScore ?? 0}
+                isBlockedByModal={authModalOpen}
                 onStartStage={handleBeginStageFromBriefing}
                 onMenu={() => setGameState('TITLE_MENU')}
               />
@@ -554,7 +572,9 @@ export default function App() {
               difficulty={activeDifficulty}
               stageIndex={stageIndex}
               totalStages={stageQueue.length}
+              personalBestScore={progress.personalBests[currentDiscipline]?.bestScore ?? 0}
               isOverlayHelp
+              isBlockedByModal={authModalOpen}
               onStartStage={() => setShowRulesHelp(false)}
               onMenu={() => {
                 setShowRulesHelp(false);
@@ -576,6 +596,7 @@ export default function App() {
               stageIndex={stageIndex}
               totalStages={stageQueue.length}
               result={lastCompletedResult}
+              previousBestScore={lastPrevBestScore}
               nextStageTitle={getDisciplineInfo(nextDiscipline, lang).title}
               onContinue={handleContinueNextStage}
               onMenu={() => setGameState('TITLE_MENU')}
@@ -589,6 +610,7 @@ export default function App() {
               todayKey={todayKey}
               streak={effectiveStreak}
               stages={stageResults}
+              newBestDisciplines={newBestDisciplines}
               record={progress.dailyRecords[todayKey]}
               onPlayAgain={startNewRun}
               onOpenDashboard={() => setGameState('DASHBOARD')}

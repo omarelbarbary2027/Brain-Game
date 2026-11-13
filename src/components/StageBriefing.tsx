@@ -1,7 +1,17 @@
 import React, { useEffect } from 'react';
-import { ArrowRight, CheckCircle2, Home, Play, ShieldAlert, Sparkles, Sun } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Home,
+  Keyboard,
+  Play,
+  ShieldAlert,
+  Sun,
+  Trophy,
+} from 'lucide-react';
 import { Difficulty, DisciplineId, GameMode } from '../types/game';
 import { getDifficultyLabel, getDisciplineInfo, useLanguage } from '../i18n/LanguageContext';
+import { CATEGORY_THEMES } from '../utils/categoryTheme';
 
 interface StageBriefingProps {
   discipline: DisciplineId;
@@ -9,7 +19,9 @@ interface StageBriefingProps {
   difficulty: Difficulty;
   stageIndex: number;
   totalStages: number;
+  personalBestScore?: number;
   isOverlayHelp?: boolean;
+  isBlockedByModal?: boolean;
   onStartStage: () => void;
   onMenu?: () => void;
 }
@@ -20,7 +32,9 @@ export const StageBriefing: React.FC<StageBriefingProps> = ({
   difficulty,
   stageIndex,
   totalStages,
+  personalBestScore = 0,
   isOverlayHelp = false,
+  isBlockedByModal = false,
   onStartStage,
   onMenu,
 }) => {
@@ -28,9 +42,14 @@ export const StageBriefing: React.FC<StageBriefingProps> = ({
   const ar = lang === 'ar';
   const meta = getDisciplineInfo(discipline, lang);
   const diffLabel = getDifficultyLabel(difficulty, lang);
+  const theme = CATEGORY_THEMES[meta.category];
+  const CategoryIcon = theme.Icon;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isBlockedByModal) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.key === 'Enter' || e.key === ' ' || (isOverlayHelp && e.key === 'Escape')) {
         e.preventDefault();
         onStartStage();
@@ -38,40 +57,60 @@ export const StageBriefing: React.FC<StageBriefingProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onStartStage, isOverlayHelp]);
+  }, [onStartStage, isOverlayHelp, isBlockedByModal]);
 
   return (
     <div
       className={`${
         isOverlayHelp
-          ? 'fixed inset-0 z-40 bg-[#0B111E]/85'
-          : 'w-full h-full'
+          ? 'fixed inset-0 z-40 bg-[#0B111E]/85 backdrop-blur-sm'
+          : 'w-full my-auto'
       } flex items-center justify-center p-3 sm:p-4`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="briefing-title"
+      onClick={(e) => {
+        if (isOverlayHelp && e.target === e.currentTarget) {
+          onStartStage();
+        }
+      }}
     >
       <div className="w-full max-w-lg max-h-[88dvh] overflow-y-auto overscroll-contain clean-scroll rounded-2xl bg-[#131C2E] border border-white/15 p-5 sm:p-7 shadow-2xl animate-modal-enter space-y-4 sm:space-y-5">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium text-teal-400">
-              {mode === 'daily'
-                ? ar
-                  ? `المرحلة اليومية ${stageIndex + 1} من ${totalStages} · ${meta.categoryLabel}`
-                  : `Daily Stage ${stageIndex + 1} of ${totalStages} · ${meta.categoryLabel}`
-                : ar
-                ? `تدريب حر · وتيرة ${diffLabel}`
-                : `Practice · ${diffLabel} Pace`}
-            </p>
-            <h2 id="briefing-title" className="font-display text-2xl sm:text-3xl font-bold text-white mt-1">
-              {meta.title}
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">{meta.cognitiveFocus}</p>
+          <div className="flex items-start gap-3 min-w-0">
+            <span
+              className={`w-10 h-10 rounded-xl ${theme.accentBgClass} flex items-center justify-center shrink-0 mt-0.5`}
+            >
+              <CategoryIcon className={`w-5 h-5 ${theme.textClass}`} aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className={`text-xs font-medium ${theme.textClass}`}>
+                {mode === 'daily'
+                  ? ar
+                    ? `المرحلة اليومية ${stageIndex + 1} من ${totalStages} · ${meta.categoryLabel}`
+                    : `Daily Stage ${stageIndex + 1} of ${totalStages} · ${meta.categoryLabel}`
+                  : ar
+                  ? `تدريب حر · وتيرة ${diffLabel}`
+                  : `Practice · ${diffLabel} Pace`}
+              </p>
+              <h2 id="briefing-title" className="font-display text-2xl sm:text-3xl font-bold text-white mt-0.5">
+                {meta.title}
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">{meta.cognitiveFocus}</p>
+            </div>
           </div>
 
-          <span dir="ltr" className="text-xs font-mono text-amber-300 pt-1 shrink-0">
-            0{stageIndex + 1} / 0{totalStages}
-          </span>
+          <div className="text-end shrink-0 space-y-1">
+            <span dir="ltr" className="block text-xs font-mono text-amber-300 font-semibold">
+              0{stageIndex + 1} / 0{totalStages}
+            </span>
+            {personalBestScore > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono tabular-nums text-slate-300">
+                <Trophy className="w-3 h-3 text-amber-400" aria-hidden="true" />
+                {personalBestScore.toLocaleString('en-US')}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10">
@@ -298,7 +337,7 @@ export const StageBriefing: React.FC<StageBriefingProps> = ({
 
         <div className="flex items-center justify-between gap-4 pt-0.5">
           <span className="text-xs text-slate-400 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
+            <Keyboard className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
             <span>{meta.controlsHint}</span>
           </span>
         </div>

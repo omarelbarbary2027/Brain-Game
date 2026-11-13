@@ -8,6 +8,7 @@ import {
   Home,
   Play,
   RotateCcw,
+  Trophy,
 } from 'lucide-react';
 import {
   DailyCompletionRecord,
@@ -20,6 +21,7 @@ import {
   useLanguage,
 } from '../i18n/LanguageContext';
 import { formatReadableDate } from '../utils/seededRandom';
+import { CATEGORY_THEMES } from '../utils/categoryTheme';
 
 interface PauseModalProps {
   onResume: () => void;
@@ -37,10 +39,13 @@ export const PauseModal: React.FC<PauseModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-[#0B111E]/85 p-3 sm:p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-[#0B111E]/85 backdrop-blur-sm p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="pause-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onResume();
+      }}
     >
       <div className="w-full max-w-sm max-h-[90dvh] overflow-y-auto clean-scroll rounded-2xl bg-[#131C2E] border border-white/15 p-5 sm:p-6 shadow-2xl animate-modal-enter space-y-5">
         <div className="flex items-start justify-between gap-3">
@@ -55,7 +60,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           <button
             type="button"
             onClick={toggleLang}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 text-xs font-medium transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 min-h-[36px] px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 text-xs font-medium transition-colors cursor-pointer shrink-0"
           >
             <Globe className="w-3.5 h-3.5 text-teal-400" aria-hidden="true" />
             <span>{ar ? 'EN' : 'عربي'}</span>
@@ -66,7 +71,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           <button
             type="button"
             onClick={onResume}
-            className="w-full h-11 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            className="w-full h-12 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <Play className="w-4 h-4 fill-current" aria-hidden="true" />
             <span>{ar ? 'متابعة اللعب' : 'Resume'}</span>
@@ -99,6 +104,7 @@ interface RoundSummaryModalProps {
   stageIndex: number;
   totalStages: number;
   result: StageResult;
+  previousBestScore?: number;
   nextStageTitle: string;
   onContinue: () => void;
   onMenu: () => void;
@@ -108,6 +114,7 @@ export const RoundSummaryModal: React.FC<RoundSummaryModalProps> = ({
   stageIndex,
   totalStages,
   result,
+  previousBestScore = 0,
   nextStageTitle,
   onContinue,
   onMenu,
@@ -115,6 +122,8 @@ export const RoundSummaryModal: React.FC<RoundSummaryModalProps> = ({
   const { lang } = useLanguage();
   const ar = lang === 'ar';
   const stageMeta = getDisciplineInfo(result.discipline, lang);
+  const theme = CATEGORY_THEMES[stageMeta.category];
+  const isNewBest = result.score > 0 && result.score > previousBestScore;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -129,24 +138,33 @@ export const RoundSummaryModal: React.FC<RoundSummaryModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-[#0B111E]/85 p-3 sm:p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-[#0B111E]/85 backdrop-blur-sm p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="stage-summary-title"
     >
       <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto clean-scroll rounded-2xl bg-[#131C2E] border border-white/15 p-5 sm:p-6 shadow-2xl animate-modal-enter space-y-5">
-        <div>
-          <p className="text-xs font-medium text-teal-400">
-            {ar
-              ? `اكتملت المرحلة ${stageIndex + 1} من ${totalStages}`
-              : `Stage ${stageIndex + 1} of ${totalStages} Complete`}
-          </p>
-          <h2 id="stage-summary-title" className="font-display text-2xl font-bold text-white mt-1">
-            {stageMeta.title}
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {stageMeta.cognitiveFocus}
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className={`text-xs font-medium ${theme.textClass}`}>
+              {ar
+                ? `اكتملت المرحلة ${stageIndex + 1} من ${totalStages}`
+                : `Stage ${stageIndex + 1} of ${totalStages} Complete`}
+            </p>
+            <h2 id="stage-summary-title" className="font-display text-2xl font-bold text-white mt-1">
+              {stageMeta.title}
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {stageMeta.cognitiveFocus}
+            </p>
+          </div>
+
+          {isNewBest && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-300 shrink-0 pt-1">
+              <Trophy className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>{ar ? 'رقم قياسي!' : 'New Best!'}</span>
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
@@ -201,6 +219,7 @@ interface VictoryModalProps {
   todayKey: string;
   streak: number;
   stages: StageResult[];
+  newBestDisciplines?: Set<string>;
   record?: DailyCompletionRecord;
   onPlayAgain: () => void;
   onReturnTitle: () => void;
@@ -213,6 +232,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
   todayKey,
   streak,
   stages,
+  newBestDisciplines,
   record,
   onPlayAgain,
   onReturnTitle,
@@ -249,6 +269,8 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
     : ar
     ? 'مكتمل'
     : 'Complete';
+
+  const hasAnyNewBest = Boolean(newBestDisciplines && newBestDisciplines.size > 0);
 
   const handleCopySummary = async () => {
     const lines = ar
@@ -289,7 +311,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-[#0B111E]/90 p-3 sm:p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-[#0B111E]/90 backdrop-blur-sm p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="victory-title"
@@ -297,14 +319,23 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
       <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto clean-scroll overscroll-contain rounded-2xl bg-[#131C2E] border border-white/15 p-5 sm:p-7 shadow-2xl animate-modal-enter space-y-4 sm:space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium text-teal-400">
-              {mode === 'daily'
-                ? ar
-                  ? `اكتمل التحدي اليومي #${dailyNumber} · ${readableDate}`
-                  : `Daily #${dailyNumber} Complete · ${readableDate}`
-                : ar
-                ? 'اكتملت جلسة التدريب'
-                : 'Practice Session Complete'}
+            <p className="text-xs font-medium text-teal-400 flex items-center gap-2 flex-wrap">
+              <span>
+                {mode === 'daily'
+                  ? ar
+                    ? `اكتمل التحدي اليومي #${dailyNumber} · ${readableDate}`
+                    : `Daily #${dailyNumber} Complete · ${readableDate}`
+                  : ar
+                  ? 'اكتملت جلسة التدريب'
+                  : 'Practice Session Complete'}
+              </span>
+              {hasAnyNewBest && (
+                <span className="inline-flex items-center gap-1 text-amber-300 font-semibold">
+                  <span aria-hidden="true">·</span>
+                  <Trophy className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{ar ? 'رقم قياسي جديد!' : 'New Personal Best!'}</span>
+                </span>
+              )}
             </p>
             <h2 id="victory-title" className="font-display text-2xl sm:text-3xl font-bold text-white mt-1">
               {mode === 'daily'
@@ -370,14 +401,33 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
         <div className="space-y-2">
           {stages.map((stage) => {
             const info = getDisciplineInfo(stage.discipline, lang);
+            const theme = CATEGORY_THEMES[info.category];
+            const CatIcon = theme.Icon;
+            const stageNewBest = newBestDisciplines?.has(stage.discipline);
+
             return (
               <div
                 key={stage.discipline}
                 className="flex items-center justify-between gap-3 px-3 sm:px-3.5 py-2.5 rounded-xl bg-slate-900/55 border border-white/5 text-xs sm:text-sm"
               >
-                <div className="min-w-0">
-                  <div className="font-semibold text-slate-100 truncate">{info.title}</div>
-                  <div className="text-xs text-slate-400 truncate">{info.shortTitle}</div>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={`w-7 h-7 rounded-lg ${theme.accentBgClass} flex items-center justify-center shrink-0`}
+                  >
+                    <CatIcon className={`w-3.5 h-3.5 ${theme.textClass}`} aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-100 truncate">
+                      <span className="truncate">{info.title}</span>
+                      {stageNewBest && (
+                        <Trophy
+                          className="w-3.5 h-3.5 text-amber-400 shrink-0"
+                          aria-label={ar ? 'رقم قياسي جديد' : 'New Personal Best'}
+                        />
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-400 truncate">{info.shortTitle}</div>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 sm:gap-4 font-mono tabular-nums text-xs sm:text-sm shrink-0">
                   <span dir="ltr" className="text-teal-300">{stage.avgReactionMs} ms</span>
@@ -399,55 +449,58 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
           </p>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
-          {mode === 'daily' && (
-            <button
-              type="button"
-              onClick={handleCopySummary}
-              className="flex-1 min-h-[44px] h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 font-medium text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-                  <span>{ar ? 'تم النسخ' : 'Copied'}</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" aria-hidden="true" />
-                  <span>{ar ? 'مشاركة النتيجة' : 'Share Result'}</span>
-                </>
-              )}
-            </button>
-          )}
-
+        {/* Thumb-Zone Action Hierarchy: Primary Full-Width CTA + Secondary Action Row */}
+        <div className="space-y-2.5 pt-1">
           <button
             type="button"
             onClick={onPlayAgain}
-            className="flex-1 min-h-[44px] h-11 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+            className="w-full min-h-[48px] rounded-xl bg-amber-400 hover:bg-amber-300 active:scale-[0.99] text-slate-950 font-semibold text-sm inline-flex items-center justify-center gap-2 transition-transform cursor-pointer whitespace-nowrap"
           >
             <RotateCcw className="w-4 h-4" aria-hidden="true" />
             <span>{ar ? 'العب مجدداً' : 'Play Again'}</span>
           </button>
 
-          {onOpenDashboard && (
+          <div className={`grid gap-2 ${mode === 'daily' && onOpenDashboard ? 'grid-cols-3' : mode === 'daily' || onOpenDashboard ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {mode === 'daily' && (
+              <button
+                type="button"
+                onClick={handleCopySummary}
+                className="min-h-[44px] px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 font-medium text-xs sm:text-sm inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+                    <span>{ar ? 'تم النسخ' : 'Copied'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 shrink-0" aria-hidden="true" />
+                    <span>{ar ? 'مشاركة' : 'Share'}</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {onOpenDashboard && (
+              <button
+                type="button"
+                onClick={onOpenDashboard}
+                className="min-h-[44px] px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 font-medium text-xs sm:text-sm inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" aria-hidden="true" />
+                <span>{ar ? 'الأداء' : 'Dashboard'}</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={onOpenDashboard}
-              className="flex-1 min-h-[44px] h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 font-medium text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+              onClick={onReturnTitle}
+              className="min-h-[44px] px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 font-medium text-xs sm:text-sm inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
-              <BarChart3 className="w-4 h-4 text-amber-400" aria-hidden="true" />
-              <span>{ar ? 'الأداء' : 'Dashboard'}</span>
+              <Home className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>{ar ? 'القائمة' : 'Menu'}</span>
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={onReturnTitle}
-            className="flex-1 min-h-[44px] h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 font-medium text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <Home className="w-4 h-4" aria-hidden="true" />
-            <span>{ar ? 'القائمة' : 'Menu'}</span>
-          </button>
+          </div>
         </div>
       </div>
     </div>

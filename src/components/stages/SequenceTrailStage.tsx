@@ -26,25 +26,25 @@ interface TrailConfig {
 function getTrailConfigs(difficulty: Difficulty): TrailConfig[] {
   if (difficulty === 'relaxed') {
     return [
-      { gridSize: 4, nodeCount: 4, blockerCount: 0, studyMs: 3000, traceMs: 18000, reverse: false },
-      { gridSize: 4, nodeCount: 5, blockerCount: 2, studyMs: 3000, traceMs: 18000, reverse: false },
-      { gridSize: 5, nodeCount: 6, blockerCount: 3, studyMs: 3100, traceMs: 20000, reverse: false },
-      { gridSize: 5, nodeCount: 5, blockerCount: 2, studyMs: 3200, traceMs: 20000, reverse: true },
+      { gridSize: 4, nodeCount: 4, blockerCount: 0, studyMs: 4000, traceMs: 22000, reverse: false },
+      { gridSize: 4, nodeCount: 5, blockerCount: 2, studyMs: 4200, traceMs: 23000, reverse: false },
+      { gridSize: 5, nodeCount: 6, blockerCount: 3, studyMs: 4400, traceMs: 24000, reverse: false },
+      { gridSize: 5, nodeCount: 5, blockerCount: 2, studyMs: 4500, traceMs: 25000, reverse: true },
     ];
   }
   if (difficulty === 'master') {
     return [
-      { gridSize: 4, nodeCount: 5, blockerCount: 2, studyMs: 1850, traceMs: 11000, reverse: false },
-      { gridSize: 5, nodeCount: 7, blockerCount: 4, studyMs: 2050, traceMs: 13000, reverse: false },
-      { gridSize: 6, nodeCount: 8, blockerCount: 5, studyMs: 2250, traceMs: 14500, reverse: false },
-      { gridSize: 6, nodeCount: 8, blockerCount: 5, studyMs: 2400, traceMs: 15500, reverse: true },
+      { gridSize: 4, nodeCount: 5, blockerCount: 2, studyMs: 2600, traceMs: 14000, reverse: false },
+      { gridSize: 5, nodeCount: 7, blockerCount: 4, studyMs: 2800, traceMs: 16000, reverse: false },
+      { gridSize: 6, nodeCount: 8, blockerCount: 5, studyMs: 3000, traceMs: 17500, reverse: false },
+      { gridSize: 6, nodeCount: 8, blockerCount: 5, studyMs: 3200, traceMs: 18500, reverse: true },
     ];
   }
   return [
-    { gridSize: 4, nodeCount: 4, blockerCount: 0, studyMs: 2400, traceMs: 14000, reverse: false },
-    { gridSize: 5, nodeCount: 6, blockerCount: 3, studyMs: 2550, traceMs: 15000, reverse: false },
-    { gridSize: 5, nodeCount: 7, blockerCount: 4, studyMs: 2700, traceMs: 16500, reverse: false },
-    { gridSize: 5, nodeCount: 7, blockerCount: 3, studyMs: 2800, traceMs: 17500, reverse: true },
+    { gridSize: 4, nodeCount: 4, blockerCount: 0, studyMs: 3300, traceMs: 18000, reverse: false },
+    { gridSize: 5, nodeCount: 6, blockerCount: 3, studyMs: 3500, traceMs: 19000, reverse: false },
+    { gridSize: 5, nodeCount: 7, blockerCount: 4, studyMs: 3700, traceMs: 20500, reverse: false },
+    { gridSize: 5, nodeCount: 7, blockerCount: 3, studyMs: 3900, traceMs: 21500, reverse: true },
   ];
 }
 
@@ -118,11 +118,22 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
   const traceRemainingMsRef = useRef(0);
   const finishedRef = useRef(false);
   const isPausedRef = useRef(isPaused);
+  const arRef = useRef(ar);
+  arRef.current = ar;
+  const timerRef = useRef<number | null>(null);
+  const wrongTimerRef = useRef<number | null>(null);
 
   const cfg = configs[roundIdx];
   const currentRoundData = roundNodes[roundIdx];
   const startNumber = cfg.reverse ? cfg.nodeCount : 1;
   const expectedNumber = cfg.reverse ? cfg.nodeCount - stepsFound : stepsFound + 1;
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      if (wrongTimerRef.current !== null) clearTimeout(wrongTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -177,7 +188,8 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
   const advanceRound = useCallback(
     (delayMs: number) => {
       setPhase('ROUND_END');
-      setTimeout(() => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => {
         if (roundIdx + 1 >= totalRounds) {
           finishStage();
         } else {
@@ -199,13 +211,13 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
     if (cfg.reverse) {
       sound.playRuleShift();
       setStatusNote(
-        ar
+        arRef.current
           ? `جولة عكسية: اضغط من ${cfg.nodeCount} تنازلياً إلى 1`
           : `REVERSE ROUND: Tap ${cfg.nodeCount} down to 1`
       );
     } else {
       setStatusNote(
-        ar
+        arRef.current
           ? 'احفظ المسار — اضغط 1 في أي وقت لمكافأة البدء السريع'
           : 'Memorize path — tap 1 anytime for Quick-Start bonus'
       );
@@ -227,7 +239,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           traceRemainingMsRef.current = cfg.traceMs;
           setTraceSecondsLeft(Math.ceil(cfg.traceMs / 1000));
           setStatusNote(
-            ar ? `اضغط موقع العقدة ${startNumber}` : `Tap concealed node ${startNumber}`
+            arRef.current ? `اضغط موقع العقدة ${startNumber}` : `Tap concealed node ${startNumber}`
           );
           lastStepTimeRef.current = performance.now();
           sound.playTick();
@@ -240,7 +252,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg, startNumber, ar]);
+  }, [phase, roundIdx, cfg, startNumber]);
 
   useEffect(() => {
     if (phase !== 'TRACE') return;
@@ -268,7 +280,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           setStreak(0);
           sound.playMiss();
           setStatusNote(
-            ar
+            arRef.current
               ? 'انتهى الوقت — عرض بقية المسار'
               : 'Trace timer expired — revealing remaining nodes'
           );
@@ -282,7 +294,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg.traceMs, advanceRound, ar]);
+  }, [phase, roundIdx, cfg.traceMs, advanceRound]);
 
   const handleCellClick = useCallback(
     (cellIdx: number) => {
@@ -385,7 +397,11 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
         setRoundMistakes(nextMistakes);
         sound.playMiss();
 
-        setTimeout(() => setWrongCell((prev) => (prev === cellIdx ? null : prev)), 350);
+        if (wrongTimerRef.current !== null) clearTimeout(wrongTimerRef.current);
+        wrongTimerRef.current = window.setTimeout(
+          () => setWrongCell((prev) => (prev === cellIdx ? null : prev)),
+          350
+        );
 
         if (nextMistakes >= 3) {
           setStatusNote(
@@ -466,7 +482,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
   }, [currentRoundData, stepsFound, cfg.gridSize]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Header Progress & Reverse Twist Indicator */}
       <div className="w-full max-w-md mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-2">
@@ -539,7 +555,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
       {/* Tactile Trail Board (kept LTR so SVG polyline coordinates align 1:1 with CSS Grid) */}
       <div
         dir="ltr"
-        className="relative p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl"
+        className="relative p-2.5 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl"
       >
         <div className="relative">
           {trailPoints && (
@@ -562,7 +578,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           )}
 
           <div
-            className="relative z-10 grid gap-1.5 sm:gap-3"
+            className="relative z-10 grid gap-1 sm:gap-3"
             style={{
               gridTemplateColumns: `repeat(${cfg.gridSize}, minmax(0, 1fr))`,
             }}

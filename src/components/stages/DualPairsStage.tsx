@@ -46,22 +46,22 @@ const SYMBOL_POOL = [
 function getRoundConfigs(difficulty: Difficulty): PairRoundConfig[] {
   if (difficulty === 'relaxed') {
     return [
-      { cols: 4, rows: 3, studyMs: 3200, matchMs: 32000 },
-      { cols: 4, rows: 4, studyMs: 3600, matchMs: 38000 },
-      { cols: 4, rows: 4, studyMs: 3200, matchMs: 35000 },
+      { cols: 4, rows: 3, studyMs: 4800, matchMs: 40000 },
+      { cols: 4, rows: 4, studyMs: 5600, matchMs: 48000 },
+      { cols: 4, rows: 4, studyMs: 5200, matchMs: 45000 },
     ];
   }
   if (difficulty === 'master') {
     return [
-      { cols: 4, rows: 3, studyMs: 2000, matchMs: 20000 },
-      { cols: 4, rows: 4, studyMs: 2300, matchMs: 24000 },
-      { cols: 4, rows: 4, studyMs: 1900, matchMs: 21000 },
+      { cols: 4, rows: 3, studyMs: 2800, matchMs: 24000 },
+      { cols: 4, rows: 4, studyMs: 3400, matchMs: 28000 },
+      { cols: 4, rows: 4, studyMs: 3100, matchMs: 26000 },
     ];
   }
   return [
-    { cols: 4, rows: 3, studyMs: 2600, matchMs: 25000 },
-    { cols: 4, rows: 4, studyMs: 3000, matchMs: 30000 },
-    { cols: 4, rows: 4, studyMs: 2500, matchMs: 27000 },
+    { cols: 4, rows: 3, studyMs: 3800, matchMs: 32000 },
+    { cols: 4, rows: 4, studyMs: 4500, matchMs: 38000 },
+    { cols: 4, rows: 4, studyMs: 4200, matchMs: 36000 },
   ];
 }
 
@@ -122,10 +122,21 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
   const isPausedRef = useRef(isPaused);
+  const arRef = useRef(ar);
+  arRef.current = ar;
+  const roundTimerRef = useRef<number | null>(null);
+  const mismatchTimerRef = useRef<number | null>(null);
 
   const cfg = configs[roundIdx];
   const deck = decks[roundIdx];
   const pairCount = deck.length / 2;
+
+  useEffect(() => {
+    return () => {
+      if (roundTimerRef.current !== null) clearTimeout(roundTimerRef.current);
+      if (mismatchTimerRef.current !== null) clearTimeout(mismatchTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -181,8 +192,13 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
 
   const advanceRound = useCallback(
     (delayMs: number) => {
+      if (mismatchTimerRef.current !== null) {
+        clearTimeout(mismatchTimerRef.current);
+        mismatchTimerRef.current = null;
+      }
       setPhase('ROUND_END');
-      setTimeout(() => {
+      if (roundTimerRef.current !== null) clearTimeout(roundTimerRef.current);
+      roundTimerRef.current = window.setTimeout(() => {
         if (roundIdx + 1 >= totalRounds) {
           finishStage();
         } else {
@@ -203,7 +219,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
     if (phase !== 'STUDY') return;
     setStudyProgress(1);
     setStatusNote(
-      ar
+      arRef.current
         ? 'التقط مواقع الأزواج قبل اختفائها'
         : 'Snapshot all symbol pairs before they conceal'
     );
@@ -224,7 +240,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
           setSecondsLeft(Math.ceil(cfg.matchMs / 1000));
           lastPairTimeRef.current = performance.now();
           setStatusNote(
-            ar ? `ابحث عن ${pairCount} أزواج متطابقة` : `Find ${pairCount} matching pairs`
+            arRef.current ? `ابحث عن ${pairCount} أزواج متطابقة` : `Find ${pairCount} matching pairs`
           );
           sound.playTick();
           return;
@@ -236,7 +252,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg, pairCount, ar]);
+  }, [phase, roundIdx, cfg, pairCount]);
 
   useEffect(() => {
     if (phase !== 'MATCH') return;
@@ -263,7 +279,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
           setStreak(0);
           sound.playMiss();
           setStatusNote(
-            ar ? 'انتهى الوقت — الانتقال للجولة التالية' : 'Time expired — advancing round'
+            arRef.current ? 'انتهى الوقت — الانتقال للجولة التالية' : 'Time expired — advancing round'
           );
           advanceRound(950);
           return;
@@ -275,7 +291,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg.matchMs, advanceRound, ar]);
+  }, [phase, roundIdx, cfg.matchMs, advanceRound]);
 
   const handleCardClick = useCallback(
     (idx: number) => {
@@ -344,7 +360,8 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
         sound.playMiss();
         setStatusNote(ar ? 'غير متطابق — واصل البحث' : 'Mismatch — keep scanning');
 
-        setTimeout(() => {
+        if (mismatchTimerRef.current !== null) clearTimeout(mismatchTimerRef.current);
+        mismatchTimerRef.current = window.setTimeout(() => {
           setFlipped([]);
           setMismatchPair([]);
           lockRef.current = false;
@@ -385,7 +402,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
   }, [isPaused, handleUseHint]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Header Progress */}
       <div className="w-full max-w-md mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-2">
@@ -474,7 +491,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
                     ? `بطاقة مقلوبة ${idx + 1}`
                     : `Face-down card ${idx + 1}`
                 }
-                className={`relative w-[68px] h-[78px] sm:w-20 sm:h-24 rounded-xl flex flex-col items-center justify-center gap-1 transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ${
+                className={`relative w-[62px] h-[72px] sm:w-[76px] sm:h-[86px] rounded-xl flex flex-col items-center justify-center gap-1 transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ${
                   isMatched
                     ? 'bg-[#F8FAFC] text-slate-900 border-2 border-teal-400 border-b-4 shadow-lg animate-tile-pop'
                     : isMismatch

@@ -119,7 +119,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
     [seed, difficulty]
   );
   const total = prompts.length;
-  const fuseMs = difficulty === 'relaxed' ? 3800 : difficulty === 'master' ? 2050 : 2750;
+  const fuseMs = difficulty === 'relaxed' ? 6000 : difficulty === 'master' ? 3300 : 4500;
 
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<'ACTIVE' | 'RULE_SHIFT'>('ACTIVE');
@@ -143,8 +143,17 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
   const lockRef = useRef(false);
   const finishedRef = useRef(false);
   const isPausedRef = useRef(isPaused);
+  const arRef = useRef(ar);
+  arRef.current = ar;
+  const timerRef = useRef<number | null>(null);
 
   const current = prompts[idx];
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -206,7 +215,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
 
   useEffect(() => {
     if (phase !== 'RULE_SHIFT' || isPaused) return;
-    const t = setTimeout(resumeAfterShift, 1800);
+    const t = setTimeout(resumeAfterShift, 3200);
     return () => clearTimeout(t);
   }, [phase, isPaused, resumeAfterShift]);
 
@@ -237,12 +246,13 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
     sound.playMiss();
     setFeedback({
       correct: false,
-      text: ar
+      text: arRef.current
         ? `انتهى الوقت · ${current.leftVal} مقابل ${current.rightVal}`
         : `Time expired · ${current.leftVal} vs ${current.rightVal}`,
     });
-    setTimeout(advanceNext, 260);
-  }, [phase, current.leftVal, current.rightVal, advanceNext, ar]);
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(advanceNext, 320);
+  }, [phase, current.leftVal, current.rightVal, advanceNext]);
 
   useEffect(() => {
     if (phase !== 'ACTIVE') return;
@@ -305,11 +315,14 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
         sound.playMiss();
         setFeedback({
           correct: false,
-          text: `${current.leftVal} vs ${current.rightVal}`,
+          text: ar
+            ? `خطأ · ${current.leftVal} مقابل ${current.rightVal}`
+            : `${current.leftVal} vs ${current.rightVal}`,
         });
       }
 
-      setTimeout(advanceNext, 180);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(advanceNext, 220);
     },
     [isPaused, phase, current, advanceNext, ar]
   );
@@ -350,7 +363,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
   }, [isPaused, phase, resumeAfterShift, handlePick, handleUseHint]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full px-4 select-none">
+    <div className="flex flex-col items-center justify-center w-full my-auto py-2 px-3 sm:px-4 select-none">
       {/* Rule & Progress */}
       <div className="w-full max-w-lg mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-2">
@@ -427,8 +440,9 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
             <div dir="ltr" className="grid grid-cols-2 gap-3">
               <button
                 type="button"
+                disabled={phase !== 'ACTIVE'}
                 onClick={() => handlePick('left')}
-                className="h-32 sm:h-40 rounded-2xl bg-[#F8FAFC] hover:bg-white text-slate-950 border-2 border-white border-b-4 border-b-slate-300 shadow-xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+                className="h-32 sm:h-40 rounded-2xl bg-[#F8FAFC] hover:bg-white text-slate-950 border-2 border-white border-b-4 border-b-slate-300 shadow-xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
                 <span className="text-xs font-medium text-slate-500">
                   {ar ? 'اليسار' : 'Left'}
@@ -445,8 +459,9 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
 
               <button
                 type="button"
+                disabled={phase !== 'ACTIVE'}
                 onClick={() => handlePick('right')}
-                className="h-32 sm:h-40 rounded-2xl bg-[#131C2E] hover:bg-slate-800 text-white border-2 border-white/15 border-b-4 border-b-slate-950 shadow-xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+                className="h-32 sm:h-40 rounded-2xl bg-[#131C2E] hover:bg-slate-800 text-white border-2 border-white/15 border-b-4 border-b-slate-950 shadow-xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
                 <span className="text-xs font-medium text-slate-400">
                   {ar ? 'اليمين' : 'Right'}

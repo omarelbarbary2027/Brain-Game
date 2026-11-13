@@ -57,7 +57,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               : 'Add to Home Screen'
           }
           aria-label={ar ? 'تثبيت التطبيق على الهاتف' : 'Install Mnemon to home screen'}
-          className="inline-flex items-center justify-center gap-1.5 min-w-[36px] min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/35 backdrop-blur-md text-teal-200 border border-teal-300/35 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shadow-sm"
+          className="inline-flex items-center justify-center gap-1.5 min-w-[40px] min-h-[40px] px-2.5 sm:px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/35 backdrop-blur-md text-teal-200 border border-teal-300/35 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shadow-sm"
         >
           <Download className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span className="hidden sm:inline">
@@ -78,6 +78,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="pwa-guide-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowGuideModal(false);
+              onTriggerMenuClose?.();
+            }
+          }}
         >
           <div className="w-full max-w-sm rounded-2xl bg-[#131C2E] border border-white/15 p-5 sm:p-6 shadow-2xl space-y-4 animate-modal-enter">
             <div className="flex items-start justify-between gap-3">
@@ -209,7 +215,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 setShowGuideModal(false);
                 onTriggerMenuClose?.();
               }}
-              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 text-xs font-semibold transition-colors cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
             >
               {ar ? 'حسناً' : 'Got It'}
             </button>
