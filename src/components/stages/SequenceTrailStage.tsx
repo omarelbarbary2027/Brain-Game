@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock, Eye, Lock, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng, shuffleWithRng } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
@@ -56,6 +57,9 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const configs = useMemo(() => getTrailConfigs(difficulty), [difficulty]);
   const totalRounds = configs.length;
 
@@ -73,7 +77,6 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
         cellToNumber.set(cellIdx, idx + 1);
       });
 
-      // Sequence of cells in the exact order player must tap them
       const targetTapSequence = cfg.reverse ? [...chosen].reverse() : [...chosen];
 
       return {
@@ -98,7 +101,9 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
   const [streak, setStreak] = useState(0);
   const [hintsLeft, setHintsLeft] = useState(2);
   const [roundMistakes, setRoundMistakes] = useState(0);
-  const [statusNote, setStatusNote] = useState<string>('Study the sequence or tap 1 to start');
+  const [statusNote, setStatusNote] = useState<string>(() =>
+    ar ? 'احفظ المسار أو اضغط 1 للبدء الفوري' : 'Study the sequence or tap 1 to start'
+  );
 
   const scoreRef = useRef(0);
   const streakRef = useRef(0);
@@ -188,15 +193,22 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
     [roundIdx, totalRounds, finishStage]
   );
 
-  // Study phase timer (pause-safe)
   useEffect(() => {
     if (phase !== 'STUDY') return;
     setStudyProgress(1);
     if (cfg.reverse) {
       sound.playRuleShift();
-      setStatusNote(`REVERSE ROUND: Tap ${cfg.nodeCount} down to 1`);
+      setStatusNote(
+        ar
+          ? `جولة عكسية: اضغط من ${cfg.nodeCount} تنازلياً إلى 1`
+          : `REVERSE ROUND: Tap ${cfg.nodeCount} down to 1`
+      );
     } else {
-      setStatusNote('Memorize path — tap 1 anytime for Quick-Start bonus');
+      setStatusNote(
+        ar
+          ? 'احفظ المسار — اضغط 1 في أي وقت لمكافأة البدء السريع'
+          : 'Memorize path — tap 1 anytime for Quick-Start bonus'
+      );
     }
     lastStepTimeRef.current = performance.now();
 
@@ -214,7 +226,9 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           setTraceProgress(1);
           traceRemainingMsRef.current = cfg.traceMs;
           setTraceSecondsLeft(Math.ceil(cfg.traceMs / 1000));
-          setStatusNote(`Tap concealed node ${startNumber}`);
+          setStatusNote(
+            ar ? `اضغط موقع العقدة ${startNumber}` : `Tap concealed node ${startNumber}`
+          );
           lastStepTimeRef.current = performance.now();
           sound.playTick();
           return;
@@ -226,9 +240,8 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg, startNumber]);
+  }, [phase, roundIdx, cfg, startNumber, ar]);
 
-  // Live Trace Countdown Fuse (pause-safe)
   useEffect(() => {
     if (phase !== 'TRACE') return;
 
@@ -254,7 +267,11 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           streakRef.current = 0;
           setStreak(0);
           sound.playMiss();
-          setStatusNote('Trace timer expired — revealing remaining nodes');
+          setStatusNote(
+            ar
+              ? 'انتهى الوقت — عرض بقية المسار'
+              : 'Trace timer expired — revealing remaining nodes'
+          );
           advanceRound(1100);
           return;
         }
@@ -265,7 +282,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg.traceMs, advanceRound]);
+  }, [phase, roundIdx, cfg.traceMs, advanceRound, ar]);
 
   const handleCellClick = useCallback(
     (cellIdx: number) => {
@@ -298,12 +315,15 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           setPhase('TRACE');
           sound.playTileStep(0);
           const nextNum = cfg.reverse ? cfg.nodeCount - 1 : 2;
-          setStatusNote(`Quick start · +150 pts · Find ${nextNum}`);
+          setStatusNote(
+            ar
+              ? `بدء سريع · +150 نقطة · ابحث عن ${nextNum}`
+              : `Quick start · +150 pts · Find ${nextNum}`
+          );
         }
         return;
       }
 
-      // Already discovered cell in tap sequence is inert
       const alreadyFoundIdx = currentRoundData.targetTapSequence.indexOf(cellIdx);
       if (alreadyFoundIdx !== -1 && alreadyFoundIdx < stepsFound) return;
 
@@ -340,14 +360,22 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           scoreRef.current += cleanBonus + timeBonus;
           setScore(scoreRef.current);
           setStatusNote(
-            roundMistakes === 0
+            ar
+              ? roundMistakes === 0
+                ? `مسار مثالي · +${cleanBonus + timeBonus} مكافأة`
+                : `تم اجتياز المسار · +${timeBonus} مكافأة الوقت`
+              : roundMistakes === 0
               ? `Flawless trail · +${cleanBonus + timeBonus} bonus`
               : `Trail cleared · +${timeBonus} time bonus`
           );
           advanceRound(750);
         } else {
           const nextNum = cfg.reverse ? cfg.nodeCount - nextStepsFound : nextStepsFound + 1;
-          setStatusNote(`Found ${expectedNumber} · ${reactionMs} ms · Next: ${nextNum}`);
+          setStatusNote(
+            ar
+              ? `أحسنت (${expectedNumber}) · ${reactionMs} ms · التالي: ${nextNum}`
+              : `Found ${expectedNumber} · ${reactionMs} ms · Next: ${nextNum}`
+          );
         }
       } else {
         streakRef.current = 0;
@@ -360,10 +388,16 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
         setTimeout(() => setWrongCell((prev) => (prev === cellIdx ? null : prev)), 350);
 
         if (nextMistakes >= 3) {
-          setStatusNote('3 misses — revealing full trail');
+          setStatusNote(
+            ar ? '3 أخطاء — كشف المسار الكامل' : '3 misses — revealing full trail'
+          );
           advanceRound(1100);
         } else {
-          setStatusNote(`Need node ${expectedNumber} · ${3 - nextMistakes} tries left`);
+          setStatusNote(
+            ar
+              ? `المطلوب العقدة ${expectedNumber} · متبقي ${3 - nextMistakes} محاولات`
+              : `Need node ${expectedNumber} · ${3 - nextMistakes} tries left`
+          );
         }
       }
     },
@@ -377,6 +411,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
       roundMistakes,
       expectedNumber,
       advanceRound,
+      ar,
     ]
   );
 
@@ -388,8 +423,10 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
     setHintsLeft((h) => h - 1);
     hintsUsedRef.current += 1;
     sound.playHint();
-    setStatusNote(`Node ${expectedNumber} highlighted`);
-  }, [isPaused, phase, hintsLeft, currentRoundData, stepsFound, expectedNumber]);
+    setStatusNote(
+      ar ? `تم تمييز العقدة ${expectedNumber}` : `Node ${expectedNumber} highlighted`
+    );
+  }, [isPaused, phase, hintsLeft, currentRoundData, stepsFound, expectedNumber, ar]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -436,18 +473,29 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           <span className={cfg.reverse ? 'text-amber-300 font-semibold' : ''}>
             {phase === 'STUDY'
               ? cfg.reverse
-                ? `Reverse Round · Study ${cfg.nodeCount} down to 1`
+                ? ar
+                  ? `جولة عكسية · احفظ من ${cfg.nodeCount} إلى 1`
+                  : `Reverse Round · Study ${cfg.nodeCount} down to 1`
+                : ar
+                ? 'احفظ ترتيب المسار'
                 : 'Study Sequence Order'
               : phase === 'TRACE'
               ? cfg.reverse
-                ? `Reverse Trail · Tap ${expectedNumber} (Countdown)`
+                ? ar
+                  ? `مسار عكسي · اضغط ${expectedNumber} (تنازلي)`
+                  : `Reverse Trail · Tap ${expectedNumber} (Countdown)`
+                : ar
+                ? `اضغط العقدة ${expectedNumber} من ${cfg.nodeCount}`
                 : `Tap Node ${expectedNumber} of ${cfg.nodeCount}`
+              : ar
+              ? 'اكتمل المسار'
               : 'Trail Complete'}
           </span>
 
           <div className="flex items-center gap-3 font-mono tabular-nums">
             {phase === 'TRACE' && (
               <span
+                dir="ltr"
                 className={`inline-flex items-center gap-1 ${
                   traceSecondsLeft <= 3 ? 'text-rose-400 font-bold' : 'text-teal-300'
                 }`}
@@ -457,14 +505,16 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
               </span>
             )}
             <span className="text-slate-400">
-              Round {roundIdx + 1}/{totalRounds} · {cfg.nodeCount} Nodes
+              {ar
+                ? `الجولة ${roundIdx + 1}/${totalRounds} · ${cfg.nodeCount} عقد`
+                : `Round ${roundIdx + 1}/${totalRounds} · ${cfg.nodeCount} Nodes`}
             </span>
           </div>
         </div>
 
         <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-[transform] duration-75 origin-left ${
+            className={`h-full rounded-full transition-[transform] duration-75 ltr:origin-left rtl:origin-right ${
               phase === 'STUDY'
                 ? 'bg-amber-400'
                 : phase === 'TRACE'
@@ -486,8 +536,11 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
         </div>
       </div>
 
-      {/* Tactile Trail Board */}
-      <div className="relative p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl">
+      {/* Tactile Trail Board (kept LTR so SVG polyline coordinates align 1:1 with CSS Grid) */}
+      <div
+        dir="ltr"
+        className="relative p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl"
+      >
         <div className="relative">
           {trailPoints && (
             <svg
@@ -529,7 +582,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
                 return (
                   <div
                     key={idx}
-                    aria-label="Obsidian blocker"
+                    aria-label={ar ? 'حاجز مغلق' : 'Obsidian blocker'}
                     className={`flex items-center justify-center rounded-xl bg-slate-950/90 border border-slate-800 text-slate-600 ${tileSizeClass}`}
                   >
                     <Lock className="w-4 h-4" aria-hidden="true" />
@@ -549,7 +602,11 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
                   onClick={() => handleCellClick(idx)}
                   aria-label={
                     isStudyVisible || isRevealed
-                      ? `Sequence node ${number}`
+                      ? ar
+                        ? `العقدة ${number}`
+                        : `Sequence node ${number}`
+                      : ar
+                      ? `خانة ${idx + 1}`
                       : `Grid cell ${idx + 1}`
                   }
                   className={`relative flex items-center justify-center rounded-xl font-mono text-xl sm:text-2xl font-bold tabular-nums transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ${tileSizeClass} ${
@@ -599,7 +656,7 @@ export const SequenceTrailStage: React.FC<SequenceTrailStageProps> = ({
           className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Hint ({hintsLeft})</span>
+          <span>{ar ? `تلميح (${hintsLeft})` : `Hint (${hintsLeft})`}</span>
         </button>
       </div>
     </div>

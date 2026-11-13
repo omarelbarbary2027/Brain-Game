@@ -12,6 +12,7 @@ import {
   Sun,
 } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng, shuffleWithRng } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
@@ -32,14 +33,14 @@ interface PairRoundConfig {
 }
 
 const SYMBOL_POOL = [
-  { id: 'sun', label: 'Sun', Icon: Sun },
-  { id: 'moon', label: 'Moon', Icon: Moon },
-  { id: 'compass', label: 'Compass', Icon: Compass },
-  { id: 'crown', label: 'Crown', Icon: Crown },
-  { id: 'anchor', label: 'Anchor', Icon: Anchor },
-  { id: 'leaf', label: 'Leaf', Icon: Leaf },
-  { id: 'hourglass', label: 'Hourglass', Icon: Hourglass },
-  { id: 'flame', label: 'Flame', Icon: Flame },
+  { id: 'sun', label: 'Sun', arLabel: 'شمس', Icon: Sun },
+  { id: 'moon', label: 'Moon', arLabel: 'قمر', Icon: Moon },
+  { id: 'compass', label: 'Compass', arLabel: 'بوصلة', Icon: Compass },
+  { id: 'crown', label: 'Crown', arLabel: 'تاج', Icon: Crown },
+  { id: 'anchor', label: 'Anchor', arLabel: 'مرساة', Icon: Anchor },
+  { id: 'leaf', label: 'Leaf', arLabel: 'ورقة', Icon: Leaf },
+  { id: 'hourglass', label: 'Hourglass', arLabel: 'ساعة رملية', Icon: Hourglass },
+  { id: 'flame', label: 'Flame', arLabel: 'شعلة', Icon: Flame },
 ] as const;
 
 function getRoundConfigs(difficulty: Difficulty): PairRoundConfig[] {
@@ -73,6 +74,9 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const configs = useMemo(() => getRoundConfigs(difficulty), [difficulty]);
   const totalRounds = configs.length;
 
@@ -100,7 +104,9 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [hintsLeft, setHintsLeft] = useState(2);
-  const [statusNote, setStatusNote] = useState('Snapshot the symbol positions');
+  const [statusNote, setStatusNote] = useState(() =>
+    ar ? 'ثبّت مواقع الرموز في ذهنك' : 'Snapshot the symbol positions'
+  );
 
   const scoreRef = useRef(0);
   const streakRef = useRef(0);
@@ -193,11 +199,14 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
     [roundIdx, totalRounds, finishStage]
   );
 
-  // Study timer (pause-safe)
   useEffect(() => {
     if (phase !== 'STUDY') return;
     setStudyProgress(1);
-    setStatusNote('Snapshot all symbol pairs before they conceal');
+    setStatusNote(
+      ar
+        ? 'التقط مواقع الأزواج قبل اختفائها'
+        : 'Snapshot all symbol pairs before they conceal'
+    );
 
     let remaining = cfg.studyMs;
     let lastTick = performance.now();
@@ -214,7 +223,9 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
           remainingMatchMsRef.current = cfg.matchMs;
           setSecondsLeft(Math.ceil(cfg.matchMs / 1000));
           lastPairTimeRef.current = performance.now();
-          setStatusNote(`Find ${pairCount} matching pairs`);
+          setStatusNote(
+            ar ? `ابحث عن ${pairCount} أزواج متطابقة` : `Find ${pairCount} matching pairs`
+          );
           sound.playTick();
           return;
         }
@@ -225,9 +236,8 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg, pairCount]);
+  }, [phase, roundIdx, cfg, pairCount, ar]);
 
-  // Match countdown timer (pause-safe)
   useEffect(() => {
     if (phase !== 'MATCH') return;
     remainingMatchMsRef.current = cfg.matchMs;
@@ -252,7 +262,9 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
           streakRef.current = 0;
           setStreak(0);
           sound.playMiss();
-          setStatusNote('Time expired — advancing round');
+          setStatusNote(
+            ar ? 'انتهى الوقت — الانتقال للجولة التالية' : 'Time expired — advancing round'
+          );
           advanceRound(950);
           return;
         }
@@ -263,7 +275,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, cfg.matchMs, advanceRound]);
+  }, [phase, roundIdx, cfg.matchMs, advanceRound, ar]);
 
   const handleCardClick = useCallback(
     (idx: number) => {
@@ -306,8 +318,11 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
         setScore(scoreRef.current);
 
         sound.playTileStep(nextMatched.size / 2 - 1);
+        const cardName = ar ? deck[a].arLabel : deck[a].label;
         setStatusNote(
-          `Matched ${deck[a].label} · ${nextMatched.size / 2}/${pairCount} pairs`
+          ar
+            ? `تطابق ${cardName} · ${nextMatched.size / 2}/${pairCount} أزواج`
+            : `Matched ${cardName} · ${nextMatched.size / 2}/${pairCount} pairs`
         );
 
         if (nextMatched.size === deck.length) {
@@ -315,7 +330,11 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
           const timeBonus = Math.round((remainingMatchMsRef.current / 1000) * 14);
           scoreRef.current += timeBonus;
           setScore(scoreRef.current);
-          setStatusNote(`Board cleared · +${timeBonus} time bonus`);
+          setStatusNote(
+            ar
+              ? `اكتملت اللوحة · +${timeBonus} مكافأة الوقت`
+              : `Board cleared · +${timeBonus} time bonus`
+          );
           advanceRound(700);
         }
       } else {
@@ -323,7 +342,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
         setStreak(0);
         setMismatchPair([a, b]);
         sound.playMiss();
-        setStatusNote('Mismatch — keep scanning');
+        setStatusNote(ar ? 'غير متطابق — واصل البحث' : 'Mismatch — keep scanning');
 
         setTimeout(() => {
           setFlipped([]);
@@ -332,7 +351,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
         }, 420);
       }
     },
-    [isPaused, phase, matched, flipped, deck, pairCount, advanceRound]
+    [isPaused, phase, matched, flipped, deck, pairCount, advanceRound, ar]
   );
 
   const handleUseHint = useCallback(() => {
@@ -350,8 +369,8 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
     setHintsLeft((h) => h - 1);
     hintsUsedRef.current += 1;
     sound.playHint();
-    setStatusNote(`Matching pair highlighted`);
-  }, [isPaused, phase, hintsLeft, hintPair.size, deck, matched]);
+    setStatusNote(ar ? 'تم تمييز زوج متطابق' : 'Matching pair highlighted');
+  }, [isPaused, phase, hintsLeft, hintPair.size, deck, matched, ar]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -372,15 +391,22 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-2">
           <span>
             {phase === 'STUDY'
-              ? 'Snapshot Card Positions'
+              ? ar
+                ? 'تثبيت مواقع البطاقات'
+                : 'Snapshot Card Positions'
               : phase === 'MATCH'
-              ? `Pairs Cleared: ${matched.size / 2} / ${pairCount}`
+              ? ar
+                ? `الأزواج المكتملة: ${matched.size / 2} / ${pairCount}`
+                : `Pairs Cleared: ${matched.size / 2} / ${pairCount}`
+              : ar
+              ? 'اكتملت الجولة'
               : 'Round Complete'}
           </span>
 
           <div className="flex items-center gap-3 font-mono tabular-nums">
             {phase === 'MATCH' && (
               <span
+                dir="ltr"
                 className={`inline-flex items-center gap-1 ${
                   secondsLeft <= 4 ? 'text-rose-400 font-bold' : 'text-teal-300'
                 }`}
@@ -390,14 +416,14 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
               </span>
             )}
             <span className="text-slate-400">
-              Round {roundIdx + 1}/{totalRounds}
+              {ar ? `الجولة ${roundIdx + 1}/${totalRounds}` : `Round ${roundIdx + 1}/${totalRounds}`}
             </span>
           </div>
         </div>
 
         <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-[transform] duration-75 origin-left ${
+            className={`h-full rounded-full transition-[transform] duration-75 ltr:origin-left rtl:origin-right ${
               phase === 'STUDY'
                 ? 'bg-amber-400'
                 : phase === 'MATCH'
@@ -420,7 +446,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
       </div>
 
       {/* Card Grid */}
-      <div className="p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl">
+      <div dir="ltr" className="p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl">
         <div
           className="grid gap-2 sm:gap-3"
           style={{ gridTemplateColumns: `repeat(${cfg.cols}, minmax(0, 1fr))` }}
@@ -433,6 +459,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
             const isFaceUp =
               phase === 'STUDY' || phase === 'ROUND_END' || isMatched || isFlipped;
             const Icon = card.Icon;
+            const cardLabel = ar ? card.arLabel : card.label;
 
             return (
               <button
@@ -440,7 +467,13 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
                 type="button"
                 disabled={phase !== 'MATCH' || isMatched || isFlipped}
                 onClick={() => handleCardClick(idx)}
-                aria-label={isFaceUp ? card.label : `Face-down card ${idx + 1}`}
+                aria-label={
+                  isFaceUp
+                    ? cardLabel
+                    : ar
+                    ? `بطاقة مقلوبة ${idx + 1}`
+                    : `Face-down card ${idx + 1}`
+                }
                 className={`relative w-[68px] h-[78px] sm:w-20 sm:h-24 rounded-xl flex flex-col items-center justify-center gap-1 transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ${
                   isMatched
                     ? 'bg-[#F8FAFC] text-slate-900 border-2 border-teal-400 border-b-4 shadow-lg animate-tile-pop'
@@ -460,7 +493,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
                       aria-hidden="true"
                     />
                     <span className="text-[10px] font-semibold tracking-tight">
-                      {card.label}
+                      {cardLabel}
                     </span>
                   </>
                 ) : isHinted ? (
@@ -487,7 +520,7 @@ export const DualPairsStage: React.FC<DualPairsStageProps> = ({
           className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Hint ({hintsLeft})</span>
+          <span>{ar ? `تلميح (${hintsLeft})` : `Hint (${hintsLeft})`}</span>
         </button>
       </div>
     </div>

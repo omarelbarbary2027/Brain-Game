@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { User, onAuthStateChanged } from 'firebase/auth';
 import {
-  DISCIPLINES,
   Difficulty,
   DisciplineId,
   GameMode,
@@ -9,19 +9,32 @@ import {
   StageResult,
   getDailyStageOrder,
 } from './types/game';
+import { getDisciplineInfo, useLanguage } from './i18n/LanguageContext';
+import { auth } from './firebase';
 import { getDailyNumber, getLocalDateKey } from './utils/seededRandom';
 import { sound } from './utils/sound';
 import {
+  buildDailyCompletionUpdate,
+  buildPracticeCompletionUpdate,
   getEffectiveStreak,
   loadProgress,
-  recordDailyCompletion,
-  recordPracticeCompletion,
   saveProgress,
 } from './utils/storage';
+import {
+  deriveDisplayUsername,
+  ensureUserProfile,
+  signOutUser,
+  subscribeUserProgress,
+  syncDailyCompletion,
+  syncMutePreference,
+  syncPracticeCompletion,
+} from './services/userProgressService';
 import { TitleScreen } from './components/TitleScreen';
 import { PerformanceDashboard } from './components/PerformanceDashboard';
 import { HudBar } from './components/HudBar';
 import { StageBriefing } from './components/StageBriefing';
+import { AuthModal } from './components/AuthModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import {
   PauseModal,
   RoundSummaryModal,
@@ -50,12 +63,19 @@ const INITIAL_HUD: LiveStageHud = {
 };
 
 export default function App() {
+  const { lang } = useLanguage();
   const [todayKey] = useState<string>(() => getLocalDateKey());
   const dailyNumber = getDailyNumber(todayKey);
   const dailyStageOrder = useMemo(() => getDailyStageOrder(todayKey), [todayKey]);
 
+  const [authReady, setAuthReady] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [activeUsername, setActiveUsername] = useState<string | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
+
   const [progress, setProgress] = useState<PlayerProgress>(() => {
-    const loaded = loadProgress();
+    const loaded = loadProgress('guest');
     sound.setMuted(loaded.muted);
     return loaded;
   });
@@ -72,21 +92,102 @@ export default function App() {
   const [hud, setHud] = useState<LiveStageHud>(INITIAL_HUD);
   const [showRulesHelp, setShowRulesHelp] = useState(false);
 
+  // Firebase Auth listener + strictly isolated per-user progress subscription
+  useEffect(() => {
+    let unsubFirestore: (() => void) | null = null;
+    let cancelled = false;
+
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      if (unsubFirestore) {
+        unsubFirestore();
+        unsubFirestore = null;
+      }
+
+      setAuthUser(user);
+
+      if (!user) {
+        setActiveUsername(null);
+        const guestProgress = loadProgress('guest');
+        sound.setMuted(guestProgress.muted);
+        setProgress(guestProgress);
+        setAuthReady(true);
+        return;
+      }
+
+      const derivedName = deriveDisplayUsername(user);
+      setActiveUsername(derivedName);
+
+      // Immediately swap to user-scoped local cache so previous user's stats never leak
+      const cachedUserProgress = loadProgress(user.uid);
+      sound.setMuted(cachedUserProgress.muted);
+      setProgress(cachedUserProgress);
+      setAuthReady(true);
+
+      try {
+        await ensureUserProfile(user, derivedName);
+      } catch (err) {
+        console.error('Profile initialization error:', err);
+      }
+
+      if (cancelled || auth.currentUser?.uid !== user.uid) return;
+
+      unsubFirestore = subscribeUserProgress(
+        user.uid,
+        (syncedProgress, profileUsername) => {
+          sound.setMuted(syncedProgress.muted);
+          setProgress(syncedProgress);
+          setActiveUsername(profileUsername);
+        },
+        (errMessage) => {
+          console.error('Firestore sync warning:', errMessage);
+        }
+      );
+    });
+
+    return () => {
+      cancelled = true;
+      unsubAuth();
+      if (unsubFirestore) unsubFirestore();
+    };
+  }, []);
+
+  const scopeKey = authUser?.uid ?? 'guest';
+
   const stageQueue: DisciplineId[] =
     selectedMode === 'daily' ? dailyStageOrder : [selectedMode];
   const currentDiscipline = stageQueue[stageIndex] ?? 'pattern';
   const activeDifficulty: Difficulty =
     selectedMode === 'daily' ? 'standard' : selectedDifficulty;
 
+  const handleOpenAuth = useCallback((mode: 'signin' | 'signup' = 'signin') => {
+    setAuthModalMode(mode);
+    setAuthModalOpen(true);
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await signOutUser();
+      setStageResults([]);
+      setGameState((curr) => (curr === 'GAME_OVER' ? 'TITLE_MENU' : curr));
+    } catch (err) {
+      console.error('Sign out failed:', err);
+    }
+  }, []);
+
   const handleToggleMute = useCallback(() => {
     setProgress((prev) => {
       const nextMuted = !prev.muted;
       sound.setMuted(nextMuted);
       const updated = { ...prev, muted: nextMuted };
-      saveProgress(updated);
+      saveProgress(updated, scopeKey);
+      if (authUser) {
+        void syncMutePreference(authUser.uid, nextMuted).catch((err) => {
+          console.error('Mute sync failed:', err);
+        });
+      }
       return updated;
     });
-  }, []);
+  }, [authUser, scopeKey]);
 
   const startRunForMode = useCallback(
     (mode: GameMode) => {
@@ -147,26 +248,77 @@ export default function App() {
               nextResults.length
           );
 
-          setProgress((prev) =>
-            recordDailyCompletion(prev, {
-              dateKey: todayKey,
-              dailyNumber,
-              totalScore,
-              avgReactionMs,
-              overallAccuracy,
-              stages: nextResults,
-              completedAt: Date.now(),
-            })
-          );
+          setProgress((prev) => {
+            const { updated, bestDailyRecord, newEntries } =
+              buildDailyCompletionUpdate(
+                prev,
+                {
+                  dateKey: todayKey,
+                  dailyNumber,
+                  totalScore,
+                  avgReactionMs,
+                  overallAccuracy,
+                  stages: nextResults,
+                  completedAt: Date.now(),
+                },
+                scopeKey
+              );
+
+            if (authUser) {
+              const uname = activeUsername || deriveDisplayUsername(authUser);
+              void syncDailyCompletion(
+                authUser.uid,
+                uname,
+                updated,
+                bestDailyRecord,
+                newEntries
+              ).catch((err) => {
+                console.error('Daily completion cloud sync error:', err);
+              });
+            }
+
+            return updated;
+          });
         } else {
-          setProgress((prev) =>
-            recordPracticeCompletion(prev, result, todayKey, activeDifficulty)
-          );
+          setProgress((prev) => {
+            const { updated, entry } = buildPracticeCompletionUpdate(
+              prev,
+              result,
+              todayKey,
+              activeDifficulty,
+              scopeKey
+            );
+
+            if (authUser) {
+              const uname = activeUsername || deriveDisplayUsername(authUser);
+              void syncPracticeCompletion(
+                authUser.uid,
+                uname,
+                updated,
+                entry
+              ).catch((err) => {
+                console.error('Practice completion cloud sync error:', err);
+              });
+            }
+
+            return updated;
+          });
         }
         setGameState('GAME_OVER');
       }
     },
-    [stageResults, stageIndex, stageQueue.length, selectedMode, todayKey, dailyNumber, activeDifficulty]
+    [
+      stageResults,
+      stageIndex,
+      stageQueue.length,
+      selectedMode,
+      todayKey,
+      dailyNumber,
+      activeDifficulty,
+      scopeKey,
+      authUser,
+      activeUsername,
+    ]
   );
 
   const handleContinueNextStage = useCallback(() => {
@@ -193,6 +345,11 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (authModalOpen) {
+          e.preventDefault();
+          setAuthModalOpen(false);
+          return;
+        }
         if (showRulesHelp) {
           e.preventDefault();
           setShowRulesHelp(false);
@@ -206,35 +363,43 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [gameState, showRulesHelp, handlePauseToggle]);
+  }, [gameState, showRulesHelp, authModalOpen, handlePauseToggle]);
 
   const effectiveStreak = getEffectiveStreak(progress, todayKey);
   const lastCompletedResult = stageResults[stageResults.length - 1];
   const nextDiscipline = stageQueue[stageIndex + 1];
-  const isStagePaused = gameState !== 'PLAYING' || showRulesHelp;
+  const isStagePaused = gameState !== 'PLAYING' || showRulesHelp || authModalOpen;
 
   return (
-    <main className="relative w-screen h-dvh overflow-hidden bg-[#0B111E] text-slate-100">
+    <main className="relative w-full h-full overflow-hidden bg-[#0B111E] text-slate-100">
       {gameState === 'TITLE_MENU' ? (
         <TitleScreen
           todayKey={todayKey}
           progress={progress}
           selectedMode={selectedMode}
           selectedDifficulty={selectedDifficulty}
+          activeUsername={activeUsername}
+          authReady={authReady}
+          isAuthModalOpen={authModalOpen}
           onSelectMode={setSelectedMode}
           onSelectDifficulty={setSelectedDifficulty}
           onStart={startNewRun}
           onViewTodayResult={handleViewTodayResult}
           onOpenDashboard={() => setGameState('DASHBOARD')}
           onToggleMute={handleToggleMute}
+          onOpenAuth={() => handleOpenAuth('signin')}
+          onSignOut={handleSignOut}
         />
       ) : gameState === 'DASHBOARD' ? (
         <PerformanceDashboard
           todayKey={todayKey}
           progress={progress}
+          activeUsername={activeUsername}
           onMenu={() => setGameState('TITLE_MENU')}
           onPlayDaily={() => startRunForMode('daily')}
           onToggleMute={handleToggleMute}
+          onOpenAuth={() => handleOpenAuth('signin')}
+          onSignOut={handleSignOut}
         />
       ) : (
         <div className="relative w-full h-full flex flex-col bg-gradient-to-b from-[#0E1525] via-[#0B111E] to-[#090E19]">
@@ -411,7 +576,7 @@ export default function App() {
               stageIndex={stageIndex}
               totalStages={stageQueue.length}
               result={lastCompletedResult}
-              nextStageTitle={DISCIPLINES[nextDiscipline].title}
+              nextStageTitle={getDisciplineInfo(nextDiscipline, lang).title}
               onContinue={handleContinueNextStage}
               onMenu={() => setGameState('TITLE_MENU')}
             />
@@ -432,6 +597,16 @@ export default function App() {
           )}
         </div>
       )}
+
+      <AuthModal
+        isOpen={authModalOpen}
+        initialMode={authModalMode}
+        currentUsername={activeUsername}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthenticated={() => setAuthModalOpen(false)}
+      />
+
+      <OfflineIndicator />
     </main>
   );
 }

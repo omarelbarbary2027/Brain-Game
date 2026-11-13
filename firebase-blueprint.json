@@ -1,0 +1,227 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Per-user Mnemon profile, streak counters, mute preference, and personal bests per challenge.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Display username chosen at sign-up.",
+          "minLength": 3,
+          "maxLength": 24,
+          "pattern": "^[a-zA-Z0-9_.\\-]+$"
+        },
+        "currentStreak": {
+          "type": "integer",
+          "description": "Current consecutive daily streak."
+        },
+        "bestStreak": {
+          "type": "integer",
+          "description": "Best recorded consecutive daily streak."
+        },
+        "lastCompletedDate": {
+          "type": "string",
+          "description": "YYYY-MM-DD of last daily completion or empty string.",
+          "maxLength": 10
+        },
+        "muted": {
+          "type": "boolean",
+          "description": "Audio mute preference."
+        },
+        "personalBests": {
+          "type": "object",
+          "description": "Map of discipline IDs to PersonalBest stats."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile update."
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "currentStreak",
+        "bestStreak",
+        "lastCompletedDate",
+        "muted",
+        "personalBests",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DailyRecord": {
+      "title": "DailyRecord",
+      "description": "Best daily circuit result completed by a user for a given calendar date.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dateKey": {
+          "type": "string",
+          "description": "Local calendar date key YYYY-MM-DD.",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "dailyNumber": {
+          "type": "integer",
+          "description": "Daily edition number."
+        },
+        "totalScore": {
+          "type": "integer",
+          "description": "Combined 3-stage daily score."
+        },
+        "avgReactionMs": {
+          "type": "integer",
+          "description": "Average reaction speed in milliseconds."
+        },
+        "overallAccuracy": {
+          "type": "integer",
+          "description": "Average accuracy percentage 0-100."
+        },
+        "completedAt": {
+          "type": "integer",
+          "description": "Client completion epoch timestamp in ms."
+        },
+        "stages": {
+          "type": "array",
+          "description": "Array of stage result objects."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last write."
+        }
+      },
+      "required": [
+        "uid",
+        "dateKey",
+        "dailyNumber",
+        "totalScore",
+        "avgReactionMs",
+        "overallAccuracy",
+        "completedAt",
+        "stages",
+        "updatedAt"
+      ]
+    },
+    "SessionEntry": {
+      "title": "SessionEntry",
+      "description": "Individual stage session record used for D3 score and reaction time trends.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dateKey": {
+          "type": "string",
+          "description": "Local date key YYYY-MM-DD.",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "timestamp": {
+          "type": "integer",
+          "description": "Session epoch timestamp in ms."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["daily", "practice"],
+          "maxLength": 16
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["relaxed", "standard", "master"],
+          "maxLength": 16
+        },
+        "discipline": {
+          "type": "string",
+          "enum": [
+            "pattern",
+            "tempo",
+            "sequence",
+            "stroop",
+            "pairs",
+            "pulse",
+            "matrix",
+            "digitspan",
+            "cipher",
+            "ruleswitch"
+          ],
+          "maxLength": 20
+        },
+        "score": {
+          "type": "integer",
+          "description": "Stage score earned."
+        },
+        "avgReactionMs": {
+          "type": "integer",
+          "description": "Mean reaction time in milliseconds."
+        },
+        "accuracy": {
+          "type": "integer",
+          "description": "Stage accuracy 0-100."
+        },
+        "bestStreak": {
+          "type": "integer",
+          "description": "Peak combo streak during stage."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        }
+      },
+      "required": [
+        "uid",
+        "dateKey",
+        "timestamp",
+        "mode",
+        "difficulty",
+        "discipline",
+        "score",
+        "avgReactionMs",
+        "accuracy",
+        "bestStreak",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private profile document storing streak, mute state, and personal bests for one user."
+    },
+    "/users/{userId}/dailyRecords/{dateKey}": {
+      "schema": { "$ref": "#/entities/DailyRecord" },
+      "description": "Per-date best Daily Trio completion record owned by the user."
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/SessionEntry" },
+      "description": "Append-only per-stage session log entries for Performance Dashboard D3 charts."
+    }
+  }
+}

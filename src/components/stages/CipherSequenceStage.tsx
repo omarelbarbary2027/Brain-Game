@@ -1,18 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clock, Eye, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng, randInt, shuffleWithRng } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
 
 interface CipherPuzzle {
   id: number;
-  terms: number[]; // length 5
-  missingIndex: number; // 3 or 4
+  terms: number[];
+  missingIndex: number;
   answer: number;
-  options: number[]; // 4 unique numbers
+  options: number[];
   answerOptionIndex: number;
   clue: string;
+  clueAr: string;
 }
 
 interface CipherSequenceStageProps {
@@ -31,7 +33,6 @@ function buildCipherSeries(
   const allowMissingMid = difficulty !== 'relaxed' && idx >= 4;
   const missingIndex = allowMissingMid && rng() < 0.35 ? 3 : 4;
 
-  // Pick a rule family scaled by puzzle index and difficulty
   const pool =
     difficulty === 'relaxed'
       ? [0, 1, 2]
@@ -42,21 +43,21 @@ function buildCipherSeries(
   const kind = pool[Math.floor(rng() * pool.length)];
 
   if (kind === 0) {
-    // Arithmetic steady step (or descending)
     const desc = difficulty !== 'relaxed' && rng() < 0.3;
     const step = randInt(3, difficulty === 'master' ? 16 : 11, rng) * (desc ? -1 : 1);
     const start = desc ? randInt(48, 86, rng) : randInt(2, 24, rng);
     const terms = Array.from({ length: 5 }, (_, n) => start + n * step);
+    const stepTxt = step >= 0 ? `+${step}` : `${step}`;
     return {
       terms,
       missingIndex,
       answer: terms[missingIndex],
-      clue: `Constant ${step >= 0 ? `+${step}` : step} step between terms`,
+      clue: `Constant ${stepTxt} step between terms`,
+      clueAr: `فرق ثابت بمقدار ${stepTxt} بين كل حدين متتاليين`,
     };
   }
 
   if (kind === 1) {
-    // Growing difference (+d, +2d, +3d...) or (+a, +a+k...)
     const start = randInt(2, 14, rng);
     const baseDiff = randInt(2, 6, rng);
     const delta = randInt(2, difficulty === 'master' ? 5 : 3, rng);
@@ -69,11 +70,11 @@ function buildCipherSeries(
       missingIndex,
       answer: terms[missingIndex],
       clue: `Differences grow by +${delta} each step`,
+      clueAr: `الزيادة تتنامى بمقدار +${delta} في كل خطوة`,
     };
   }
 
   if (kind === 2) {
-    // Fibonacci-style sum of previous two
     const a = randInt(2, 9, rng);
     const b = randInt(a + 1, a + 11, rng);
     const terms = [a, b];
@@ -85,11 +86,11 @@ function buildCipherSeries(
       missingIndex,
       answer: terms[missingIndex],
       clue: 'Each term equals the sum of the two before it',
+      clueAr: 'كل رقم يساوي مجموع الرقمين السابقين له مباشرة',
     };
   }
 
   if (kind === 3) {
-    // Alternating operations: +a then *2 (or +a then -b)
     if (rng() < 0.5) {
       const start = randInt(2, 8, rng);
       const add = randInt(2, 7, rng);
@@ -102,6 +103,7 @@ function buildCipherSeries(
         missingIndex,
         answer: terms[missingIndex],
         clue: `Alternating rule: +${add}, then ×2`,
+        clueAr: `قاعدة متناوبة: أضف ${add} ثم اضرب ×2`,
       };
     } else {
       const start = randInt(12, 28, rng);
@@ -116,12 +118,12 @@ function buildCipherSeries(
         missingIndex,
         answer: terms[missingIndex],
         clue: `Alternating rule: +${up}, then −${down}`,
+        clueAr: `قاعدة متناوبة: أضف ${up} ثم اطرح ${down}`,
       };
     }
   }
 
   if (kind === 4) {
-    // Interleaved dual sequences
     const a0 = randInt(4, 18, rng);
     const stepA = randInt(3, 8, rng);
     const b0 = randInt(20, 46, rng);
@@ -132,10 +134,10 @@ function buildCipherSeries(
       missingIndex,
       answer: terms[missingIndex],
       clue: 'Two interleaved tracks (1st/3rd/5th and 2nd/4th)',
+      clueAr: 'مساران متداخلان (المواقع 1 و3 و5 معاً، و2 و4 معاً)',
     };
   }
 
-  // kind === 5: Squares + offset
   const baseN = randInt(1, 4, rng);
   const offset = randInt(1, 9, rng);
   const terms = Array.from({ length: 5 }, (_, i) => (baseN + i) * (baseN + i) + offset);
@@ -144,6 +146,7 @@ function buildCipherSeries(
     missingIndex,
     answer: terms[missingIndex],
     clue: `Square sequence (n² + ${offset})`,
+    clueAr: `متتالية مربعات الأعداد (ن² + ${offset})`,
   };
 }
 
@@ -198,6 +201,9 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const puzzles = useMemo(() => generateCipherPuzzles(seed, difficulty), [seed, difficulty]);
   const total = puzzles.length;
   const fuseMs = difficulty === 'relaxed' ? 15000 : difficulty === 'master' ? 8000 : 11000;
@@ -314,10 +320,12 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
     sound.playMiss();
     setFeedback({
       correct: false,
-      text: `Time expired · Missing value was ${current.answer}`,
+      text: ar
+        ? `انتهى الوقت · الرقم المفقود ${current.answer}`
+        : `Time expired · Missing value was ${current.answer}`,
     });
     timerRef.current = window.setTimeout(advanceNext, 750);
-  }, [current.answer, current.answerOptionIndex, advanceNext]);
+  }, [current.answer, current.answerOptionIndex, advanceNext, ar]);
 
   useEffect(() => {
     remainingMsRef.current = fuseMs;
@@ -378,7 +386,10 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
         scoreRef.current += pts;
         setScore(scoreRef.current);
         sound.playSuccess(nextStreak);
-        setFeedback({ correct: true, text: `+${pts} pts · ${reactionMs} ms` });
+        setFeedback({
+          correct: true,
+          text: ar ? `+${pts} نقطة · ${reactionMs} ms` : `+${pts} pts · ${reactionMs} ms`,
+        });
         timerRef.current = window.setTimeout(advanceNext, 340);
       } else {
         streakRef.current = 0;
@@ -386,12 +397,14 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
         sound.playMiss();
         setFeedback({
           correct: false,
-          text: `Missed · Answer was ${current.answer}`,
+          text: ar
+            ? `خطأ · الإجابة الصحيحة ${current.answer}`
+            : `Missed · Answer was ${current.answer}`,
         });
         timerRef.current = window.setTimeout(advanceNext, 780);
       }
     },
-    [eliminated, current.answerOptionIndex, current.answer, advanceNext]
+    [eliminated, current.answerOptionIndex, current.answer, advanceNext, ar]
   );
 
   const handleUseHint = useCallback(() => {
@@ -433,9 +446,12 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
       {/* Progress & Timer */}
       <div className="w-full max-w-md mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">
-          <span className="text-teal-300 font-semibold">Deduce the Missing Number</span>
+          <span className="text-teal-300 font-semibold">
+            {ar ? 'استنتج الرقم المفقود' : 'Deduce the Missing Number'}
+          </span>
           <div className="flex items-center gap-3 font-mono tabular-nums">
             <span
+              dir="ltr"
               className={`inline-flex items-center gap-1 ${
                 secondsLeft <= 3 ? 'text-rose-400 font-bold' : 'text-teal-300'
               }`}
@@ -444,14 +460,14 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
               {secondsLeft}s
             </span>
             <span className="text-slate-400">
-              Series {idx + 1}/{total}
+              {ar ? `المتتالية ${idx + 1}/${total}` : `Series ${idx + 1}/${total}`}
             </span>
           </div>
         </div>
 
         <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className={`h-full rounded-full origin-left ${
+            className={`h-full rounded-full ltr:origin-left rtl:origin-right ${
               secondsLeft <= 3 ? 'bg-rose-500' : 'bg-amber-400'
             }`}
             style={{ transform: `scaleX(${fuseProgress})` }}
@@ -459,9 +475,9 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
         </div>
       </div>
 
-      {/* 5-Tile Number Sequence Board */}
+      {/* 5-Tile Number Sequence Board (always LTR so progression reads left-to-right) */}
       <div className="w-full max-w-md rounded-2xl bg-[#131C2E] border-2 border-white/15 p-4 sm:p-6 shadow-2xl space-y-4">
-        <div className="grid grid-cols-5 gap-1.5 sm:gap-2.5">
+        <div dir="ltr" className="grid grid-cols-5 gap-1.5 sm:gap-2.5">
           {current.terms.map((val, pos) => {
             const isMissing = pos === current.missingIndex;
             const revealed = isMissing && selectedIdx !== null;
@@ -484,7 +500,7 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
 
         {clueRevealed && (
           <div className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/35 text-xs text-amber-200 text-center">
-            Clue: {current.clue}
+            {ar ? `القاعدة: ${current.clueAr}` : `Clue: ${current.clue}`}
           </div>
         )}
       </div>
@@ -502,13 +518,15 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
             ) : (
               <X className="w-4 h-4" aria-hidden="true" />
             )}
-            <span className="font-mono tabular-nums">{feedback.text}</span>
+            <span dir="ltr" className="font-mono tabular-nums">
+              {feedback.text}
+            </span>
           </div>
         )}
       </div>
 
-      {/* 4 Answer Choices */}
-      <div className="w-full max-w-md mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      {/* 4 Answer Choices (kept LTR for 1-4 shortcuts) */}
+      <div dir="ltr" className="w-full max-w-md mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {current.options.map((opt, optIdx) => {
           const isElim = eliminated.has(optIdx);
           const isSelected = selectedIdx === optIdx;
@@ -542,7 +560,9 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
 
       {/* Footer Controls & Hint */}
       <div className="w-full max-w-md mt-4 flex items-center justify-between">
-        <span className="text-xs text-slate-400">Keys 1–4 or Tap</span>
+        <span className="text-xs text-slate-400">
+          {ar ? 'مفاتيح 1–4 أو اضغط الإجابة' : 'Keys 1–4 or Tap'}
+        </span>
         <button
           type="button"
           onClick={handleUseHint}
@@ -550,7 +570,7 @@ export const CipherSequenceStage: React.FC<CipherSequenceStageProps> = ({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Pattern Clue ({hintsLeft})</span>
+          <span>{ar ? `تلميح القاعدة (${hintsLeft})` : `Pattern Clue (${hintsLeft})`}</span>
         </button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clock, Eye, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng, shuffleWithRng } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
@@ -17,9 +18,9 @@ interface MatrixCellSpec {
 
 interface MatrixPuzzle {
   id: number;
-  grid: MatrixCellSpec[]; // 9 cells (last index 8 is the target answer)
+  grid: MatrixCellSpec[];
   answer: MatrixCellSpec;
-  options: MatrixCellSpec[]; // 4 unique options
+  options: MatrixCellSpec[];
   answerOptionIndex: number;
 }
 
@@ -105,7 +106,6 @@ function generateMatrixPuzzles(seed: string, difficulty: Difficulty): MatrixPuzz
     const used = new Set<string>([cellKey(answer)]);
     const distractors: MatrixCellSpec[] = [];
 
-    // Generate plausible near-miss distractors (differing by 1 or 2 attributes)
     let guard = 0;
     while (distractors.length < 3 && guard < 60) {
       guard += 1;
@@ -125,7 +125,6 @@ function generateMatrixPuzzles(seed: string, difficulty: Difficulty): MatrixPuzz
       }
     }
 
-    // Fallback deterministic fill if needed
     for (const s of SHAPES) {
       for (const st of STYLES) {
         for (const cnt of COUNTS) {
@@ -271,6 +270,9 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const puzzles = useMemo(() => generateMatrixPuzzles(seed, difficulty), [seed, difficulty]);
   const total = puzzles.length;
   const fuseMs = difficulty === 'relaxed' ? 16000 : difficulty === 'master' ? 8500 : 11500;
@@ -385,10 +387,12 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
     sound.playMiss();
     setFeedback({
       correct: false,
-      text: `Time expired · Correct tile was #${current.answerOptionIndex + 1}`,
+      text: ar
+        ? `انتهى الوقت · الخيار الصحيح #${current.answerOptionIndex + 1}`
+        : `Time expired · Correct tile was #${current.answerOptionIndex + 1}`,
     });
     timerRef.current = window.setTimeout(advanceNext, 750);
-  }, [current.answerOptionIndex, advanceNext]);
+  }, [current.answerOptionIndex, advanceNext, ar]);
 
   useEffect(() => {
     remainingMsRef.current = fuseMs;
@@ -449,7 +453,10 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
         scoreRef.current += pts;
         setScore(scoreRef.current);
         sound.playSuccess(nextStreak);
-        setFeedback({ correct: true, text: `+${pts} pts · ${reactionMs} ms` });
+        setFeedback({
+          correct: true,
+          text: ar ? `+${pts} نقطة · ${reactionMs} ms` : `+${pts} pts · ${reactionMs} ms`,
+        });
         timerRef.current = window.setTimeout(advanceNext, 340);
       } else {
         streakRef.current = 0;
@@ -457,12 +464,14 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
         sound.playMiss();
         setFeedback({
           correct: false,
-          text: `Missed · Option #${current.answerOptionIndex + 1} completed the rule`,
+          text: ar
+            ? `خطأ · الخيار #${current.answerOptionIndex + 1} هو المكمل الصحيح`
+            : `Missed · Option #${current.answerOptionIndex + 1} completed the rule`,
         });
         timerRef.current = window.setTimeout(advanceNext, 780);
       }
     },
-    [eliminated, current.answerOptionIndex, advanceNext]
+    [eliminated, current.answerOptionIndex, advanceNext, ar]
   );
 
   const handleUseHint = useCallback(() => {
@@ -503,9 +512,12 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
       {/* Progress & Timer */}
       <div className="w-full max-w-md mb-3 sm:mb-4">
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">
-          <span className="text-teal-300 font-semibold">Complete the 3×3 Visual Rule</span>
+          <span className="text-teal-300 font-semibold">
+            {ar ? 'أكمل النمط البصري 3×3' : 'Complete the 3×3 Visual Rule'}
+          </span>
           <div className="flex items-center gap-3 font-mono tabular-nums">
             <span
+              dir="ltr"
               className={`inline-flex items-center gap-1 ${
                 secondsLeft <= 3 ? 'text-rose-400 font-bold' : 'text-teal-300'
               }`}
@@ -514,14 +526,14 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
               {secondsLeft}s
             </span>
             <span className="text-slate-400">
-              Puzzle {idx + 1}/{total}
+              {ar ? `اللغز ${idx + 1}/${total}` : `Puzzle ${idx + 1}/${total}`}
             </span>
           </div>
         </div>
 
         <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className={`h-full rounded-full origin-left ${
+            className={`h-full rounded-full ltr:origin-left rtl:origin-right ${
               secondsLeft <= 3 ? 'bg-rose-500' : 'bg-amber-400'
             }`}
             style={{ transform: `scaleX(${fuseProgress})` }}
@@ -529,8 +541,8 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
         </div>
       </div>
 
-      {/* 3x3 Raven Matrix Board */}
-      <div className="p-2.5 sm:p-4 rounded-2xl bg-[#131C2E] border border-white/15 shadow-2xl">
+      {/* 3x3 Raven Matrix Board (kept LTR so bottom-right missing slot aligns visually) */}
+      <div dir="ltr" className="p-2.5 sm:p-4 rounded-2xl bg-[#131C2E] border border-white/15 shadow-2xl">
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5">
           {current.grid.map((cell, cellIdx) => {
             const isMissing = cellIdx === 8;
@@ -570,13 +582,15 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
             ) : (
               <X className="w-4 h-4" aria-hidden="true" />
             )}
-            <span className="font-mono tabular-nums">{feedback.text}</span>
+            <span dir="ltr" className="font-mono tabular-nums">
+              {feedback.text}
+            </span>
           </div>
         )}
       </div>
 
-      {/* 4 Candidate Choices */}
-      <div className="w-full max-w-md mt-1.5 grid grid-cols-4 gap-2">
+      {/* 4 Candidate Choices (kept LTR so 1-4 stay ordered) */}
+      <div dir="ltr" className="w-full max-w-md mt-1.5 grid grid-cols-4 gap-2">
         {current.options.map((opt, optIdx) => {
           const isElim = eliminated.has(optIdx);
           const isSelected = selectedIdx === optIdx;
@@ -589,7 +603,11 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
               type="button"
               disabled={isElim || selectedIdx !== null}
               onClick={() => handleSelectOption(optIdx)}
-              aria-label={`Option ${optIdx + 1}: ${opt.count} ${opt.style} ${opt.shape}`}
+              aria-label={
+                ar
+                  ? `الخيار ${optIdx + 1}`
+                  : `Option ${optIdx + 1}: ${opt.count} ${opt.style} ${opt.shape}`
+              }
               className={`relative h-[74px] sm:h-20 rounded-xl border-2 border-b-4 flex flex-col items-center justify-center transition-transform active:scale-95 disabled:cursor-not-allowed cursor-pointer ${
                 isElim
                   ? 'opacity-20 bg-slate-900 border-white/5'
@@ -611,7 +629,9 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
 
       {/* Controls & Hint */}
       <div className="w-full max-w-md mt-3 flex items-center justify-between">
-        <span className="text-xs text-slate-400">Keys 1–4 or Tap Candidate</span>
+        <span className="text-xs text-slate-400">
+          {ar ? 'مفاتيح 1–4 أو اضغط الخيار' : 'Keys 1–4 or Tap Candidate'}
+        </span>
         <button
           type="button"
           onClick={handleUseHint}
@@ -619,7 +639,7 @@ export const MatrixLogicStage: React.FC<MatrixLogicStageProps> = ({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Narrow 2 ({hintsLeft})</span>
+          <span>{ar ? `استبعاد خيارين (${hintsLeft})` : `Narrow 2 (${hintsLeft})`}</span>
         </button>
       </div>
     </div>

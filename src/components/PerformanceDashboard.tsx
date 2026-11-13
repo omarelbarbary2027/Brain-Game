@@ -2,9 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import {
   BarChart3,
+  Globe,
   LayoutGrid,
+  LogOut,
   Play,
   RotateCcw,
+  User,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -17,15 +20,25 @@ import {
   PlayerProgress,
   SessionLogEntry,
 } from '../types/game';
+import {
+  getCategoryLabel,
+  getDifficultyLabel,
+  getDisciplineInfo,
+  useLanguage,
+} from '../i18n/LanguageContext';
+import { Lang } from '../i18n/translations';
 import { formatReadableDate } from '../utils/seededRandom';
 import { getEffectiveStreak } from '../utils/storage';
 
 interface PerformanceDashboardProps {
   todayKey: string;
   progress: PlayerProgress;
+  activeUsername: string | null;
   onMenu: () => void;
   onPlayDaily: () => void;
   onToggleMute: () => void;
+  onOpenAuth: () => void;
+  onSignOut: () => void;
 }
 
 type ModeFilter = 'all' | 'daily' | 'practice';
@@ -45,12 +58,6 @@ interface AggregateGroupRow {
   disciplineId?: DisciplineId;
 }
 
-const MODE_FILTERS: { id: ModeFilter; label: string }[] = [
-  { id: 'all', label: 'All Modes' },
-  { id: 'daily', label: 'Daily Trio' },
-  { id: 'practice', label: 'Practice' },
-];
-
 const CATEGORY_FILTERS: CategoryFilter[] = [
   'All',
   'Memory',
@@ -59,32 +66,33 @@ const CATEGORY_FILTERS: CategoryFilter[] = [
   'Pattern & IQ',
 ];
 
-const RANGE_FILTERS: { id: DateRangeFilter; label: string }[] = [
-  { id: '7d', label: '7 Days' },
-  { id: '30d', label: '30 Days' },
-  { id: 'all', label: 'All Dates' },
-];
-
 function parseDateKeyMs(dateKey: string): number {
   const [y, m, d] = dateKey.split('-').map(Number);
   return new Date(y, m - 1, d).getTime();
 }
 
-function formatShortDateTime(entry: SessionLogEntry, multiDay: boolean): string {
+function formatShortDateTime(entry: SessionLogEntry, multiDay: boolean, lang: Lang): string {
   const dt = new Date(entry.timestamp);
+  const locale = lang === 'ar' ? 'ar-EG-u-nu-latn' : 'en-US';
   if (multiDay) {
-    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return dt.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
   }
-  return dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return dt.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
 }
 
 export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
   todayKey,
   progress,
+  activeUsername,
   onMenu,
   onPlayDaily,
   onToggleMute,
+  onOpenAuth,
+  onSignOut,
 }) => {
+  const { lang, toggleLang } = useLanguage();
+  const ar = lang === 'ar';
+
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('All');
   const [disciplineFilter, setDisciplineFilter] = useState<'all' | DisciplineId>('all');
@@ -100,6 +108,18 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
   const barContainerRef = useRef<HTMLDivElement | null>(null);
   const barSvgRef = useRef<SVGSVGElement | null>(null);
   const [barWidth, setBarWidth] = useState(520);
+
+  const modeFilters: { id: ModeFilter; label: string }[] = [
+    { id: 'all', label: ar ? 'الكل' : 'All Modes' },
+    { id: 'daily', label: ar ? 'التحدي اليومي' : 'Daily Trio' },
+    { id: 'practice', label: ar ? 'تدريب حر' : 'Practice' },
+  ];
+
+  const rangeFilters: { id: DateRangeFilter; label: string }[] = [
+    { id: '7d', label: ar ? '7 أيام' : '7 Days' },
+    { id: '30d', label: ar ? '30 يوماً' : '30 Days' },
+    { id: 'all', label: ar ? 'كل الفترات' : 'All Dates' },
+  ];
 
   const streak = getEffectiveStreak(progress, todayKey);
   const totalSavedRuns = progress.sessionHistory.length;
@@ -215,10 +235,11 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
         const list = grouped.get(id);
         if (!list || list.length === 0) continue;
         const speedList = list.filter((e) => e.avgReactionMs > 0);
+        const info = getDisciplineInfo(id, lang);
         rows.push({
           key: id,
-          label: DISCIPLINES[id].title,
-          sublabel: DISCIPLINES[id].category,
+          label: info.title,
+          sublabel: info.categoryLabel,
           count: list.length,
           avgScore: Math.round(list.reduce((sum, e) => sum + e.score, 0) / list.length),
           bestScore: Math.max(...list.map((e) => e.score)),
@@ -235,7 +256,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       return rows.sort((a, b) => b.avgScore - a.avgScore);
     }
 
-    // Grouped by Mode + Pace ('Daily Trio' vs 'Practice · Relaxed / Standard / Master')
     const buckets: {
       key: string;
       label: string;
@@ -244,14 +264,16 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
     }[] = [
       {
         key: 'daily',
-        label: 'Daily Trio',
-        sublabel: 'Standard Circuit',
+        label: ar ? 'التحدي اليومي' : 'Daily Trio',
+        sublabel: ar ? 'جولة يومية متوازنة' : 'Standard Circuit',
         match: (e) => e.mode === 'daily',
       },
       ...(['relaxed', 'standard', 'master'] as Difficulty[]).map((diff) => ({
         key: `practice-${diff}`,
-        label: `Practice · ${diff.charAt(0).toUpperCase() + diff.slice(1)}`,
-        sublabel: 'Single Challenge',
+        label: ar
+          ? `تدريب · ${getDifficultyLabel(diff, 'ar')}`
+          : `Practice · ${getDifficultyLabel(diff, 'en')}`,
+        sublabel: ar ? 'تحدٍّ فردي' : 'Single Challenge',
         match: (e: SessionLogEntry) => e.mode === 'practice' && e.difficulty === diff,
       })),
     ];
@@ -278,7 +300,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       });
     }
     return rows;
-  }, [filteredSessions, breakdownView]);
+  }, [filteredSessions, breakdownView, lang, ar]);
 
   const activeInspection = inspectedEntry ?? filteredSessions[filteredSessions.length - 1] ?? null;
 
@@ -293,7 +315,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
 
     const width = Math.max(280, trendWidth);
     const height = 316;
-    const margin = { top: 18, right: 16, bottom: 28, left: 46 };
+    const margin = { top: 18, right: 16, bottom: 28, left: 48 };
     const innerW = width - margin.left - margin.right;
 
     const upperTop = margin.top;
@@ -327,7 +349,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
 
     const g = svg.append('g');
 
-    // X Scale across chronological timestamps (with gentle padding when 1 point or tight cluster)
     const times = filteredSessions.map((d) => d.timestamp);
     const minT = d3.min(times) ?? Date.now();
     const maxT = d3.max(times) ?? Date.now();
@@ -340,17 +361,19 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
 
     const distinctDays = new Set(filteredSessions.map((d) => d.dateKey)).size;
     const tickCount = width < 440 ? 4 : 6;
+    const locale = lang === 'ar' ? 'ar-EG-u-nu-latn' : 'en-US';
     const xAxis = d3
       .axisBottom<Date>(xScale)
       .ticks(tickCount)
       .tickSize(0)
       .tickPadding(8)
       .tickFormat((dt) => {
-        if (distinctDays > 1) return d3.timeFormat('%b %d')(dt);
+        if (distinctDays > 1) {
+          return dt.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+        }
         return d3.timeFormat('%H:%M')(dt);
       });
 
-    // Upper Panel Y Scale: Score (pts)
     const maxScore = d3.max(filteredSessions, (d) => d.score) ?? 1000;
     const scoreY = d3
       .scaleLinear()
@@ -358,7 +381,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .nice()
       .range([upperTop + upperHeight, upperTop]);
 
-    // Lower Panel Y Scale: Reaction Time (ms)
     const validMs = filteredSessions.filter((d) => d.avgReactionMs > 0);
     const maxReact = d3.max(validMs, (d) => d.avgReactionMs) ?? 1200;
     const reactY = d3
@@ -367,7 +389,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .nice()
       .range([lowerTop + lowerHeight, lowerTop]);
 
-    // Gridlines for Score panel
     g.append('g')
       .attr('transform', `translate(${margin.left},0)`)
       .call(
@@ -382,7 +403,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('stroke', 'rgba(255,255,255,0.07)')
       .attr('stroke-dasharray', '3,3');
 
-    // Score Y Axis Labels
     g.append('g')
       .attr('transform', `translate(${margin.left},0)`)
       .call(
@@ -399,7 +419,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('font-family', 'JetBrains Mono, monospace')
       .attr('font-size', '10px');
 
-    // Gridlines for Reaction Time panel
     g.append('g')
       .attr('transform', `translate(${margin.left},0)`)
       .call(
@@ -414,7 +433,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('stroke', 'rgba(255,255,255,0.07)')
       .attr('stroke-dasharray', '3,3');
 
-    // Reaction Y Axis Labels
     g.append('g')
       .attr('transform', `translate(${margin.left},0)`)
       .call(
@@ -431,34 +449,33 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('font-family', 'JetBrains Mono, monospace')
       .attr('font-size', '10px');
 
-    // Track Titles inside SVG
     g.append('text')
       .attr('x', margin.left)
       .attr('y', upperTop - 5)
       .attr('fill', '#FBBF24')
+      .attr('font-family', 'Cairo, Plus Jakarta Sans, sans-serif')
       .attr('font-size', '11px')
       .attr('font-weight', '600')
-      .text('Score (pts)');
+      .text(ar ? 'النقاط' : 'Score (pts)');
 
     g.append('text')
       .attr('x', margin.left)
       .attr('y', lowerTop - 7)
       .attr('fill', '#2DD4BF')
+      .attr('font-family', 'Cairo, Plus Jakarta Sans, sans-serif')
       .attr('font-size', '11px')
       .attr('font-weight', '600')
-      .text('Reaction Time (ms · lower is faster)');
+      .text(ar ? 'زمن الاستجابة (ms · الأقل أسرع)' : 'Reaction Time (ms · lower is faster)');
 
-    // Shared X-Axis
     g.append('g')
       .attr('transform', `translate(0,${lowerTop + lowerHeight})`)
       .call(xAxis)
       .call((sel) => sel.select('.domain').attr('stroke', 'rgba(255,255,255,0.12)'))
       .selectAll('text')
       .attr('fill', '#94A3B8')
-      .attr('font-family', 'JetBrains Mono, monospace')
+      .attr('font-family', 'Cairo, JetBrains Mono, monospace')
       .attr('font-size', '10px');
 
-    // Score Area + Line
     if (filteredSessions.length > 1) {
       const scoreArea = d3
         .area<SessionLogEntry>()
@@ -486,7 +503,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
         .attr('d', scoreLine);
     }
 
-    // Reaction Area + Line
     if (validMs.length > 1) {
       const reactArea = d3
         .area<SessionLogEntry>()
@@ -514,7 +530,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
         .attr('d', reactLine);
     }
 
-    // Average reaction reference line
     if (kpis.avgReactionMs > 0) {
       g.append('line')
         .attr('x1', margin.left)
@@ -525,7 +540,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
         .attr('stroke-dasharray', '4,4');
     }
 
-    // Interactive Crosshair Guide
     const crosshair = g
       .append('line')
       .attr('y1', upperTop)
@@ -534,7 +548,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('stroke-width', 1)
       .style('opacity', 0);
 
-    // Data Nodes (Daily = circle, Practice = diamond/square marker)
     g.selectAll('.score-dot')
       .data(filteredSessions)
       .enter()
@@ -557,7 +570,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('stroke', '#0B111E')
       .attr('stroke-width', 1.5);
 
-    // Nearest-Point Pointer Overlay (mouse + touch friendly)
     const bisect = d3.bisector<SessionLogEntry, number>((d) => d.timestamp).center;
 
     g.append('rect')
@@ -580,7 +592,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .on('pointerleave', () => {
         crosshair.style('opacity', 0);
       });
-  }, [filteredSessions, trendWidth, kpis.avgReactionMs, activeInspection?.id]);
+  }, [filteredSessions, trendWidth, kpis.avgReactionMs, activeInspection?.id, lang, ar]);
 
   // D3 Chart 2: Grouped Horizontal Comparison Across Modes or Challenges
   useEffect(() => {
@@ -593,7 +605,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
 
     const width = Math.max(260, barWidth);
     const rowHeight = 46;
-    const margin = { top: 22, right: 54, bottom: 20, left: width < 400 ? 104 : 132 };
+    const margin = { top: 22, right: 54, bottom: 20, left: width < 400 ? 112 : 140 };
     const height = margin.top + margin.bottom + breakdownRows.length * rowHeight;
     const innerW = Math.max(80, width - margin.left - margin.right);
 
@@ -619,7 +631,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .domain([0, Math.max(500, maxAvgReact * 1.15)])
       .range([0, innerW]);
 
-    // Legend top row
     g.append('rect')
       .attr('x', margin.left)
       .attr('y', 4)
@@ -631,22 +642,25 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('x', margin.left + 15)
       .attr('y', 10)
       .attr('fill', '#CBD5E1')
+      .attr('font-family', 'Cairo, Plus Jakarta Sans, sans-serif')
       .attr('font-size', '10px')
-      .text('Avg Score');
+      .text(ar ? 'متوسط النقاط' : 'Avg Score');
 
+    const speedLegendX = ar ? margin.left + 96 : margin.left + 84;
     g.append('rect')
-      .attr('x', margin.left + 84)
+      .attr('x', speedLegendX)
       .attr('y', 4)
       .attr('width', 10)
       .attr('height', 6)
       .attr('rx', 2)
       .attr('fill', '#2DD4BF');
     g.append('text')
-      .attr('x', margin.left + 99)
+      .attr('x', speedLegendX + 15)
       .attr('y', 10)
       .attr('fill', '#CBD5E1')
+      .attr('font-family', 'Cairo, Plus Jakarta Sans, sans-serif')
       .attr('font-size', '10px')
-      .text('Avg Speed (ms)');
+      .text(ar ? 'متوسط السرعة (ms)' : 'Avg Speed (ms)');
 
     const barGroups = g
       .selectAll('.agg-row')
@@ -662,7 +676,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
         setDisciplineFilter((curr) => (curr === d.disciplineId ? 'all' : d.disciplineId!));
       });
 
-    // Left Category / Mode Label
     barGroups
       .append('text')
       .attr('x', margin.left - 10)
@@ -671,9 +684,10 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('fill', (d) =>
         d.disciplineId && disciplineFilter === d.disciplineId ? '#FBBF24' : '#F1F5F9'
       )
+      .attr('font-family', 'Cairo, Plus Jakarta Sans, sans-serif')
       .attr('font-size', '11px')
       .attr('font-weight', '600')
-      .text((d) => (d.label.length > 16 ? `${d.label.slice(0, 15)}…` : d.label));
+      .text((d) => (d.label.length > 18 ? `${d.label.slice(0, 17)}…` : d.label));
 
     barGroups
       .append('text')
@@ -685,7 +699,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('font-size', '9.5px')
       .text((d) => `${d.count}× · ${d.avgAccuracy}%`);
 
-    // Score track + bar
     const subH = Math.max(7, Math.floor((yScale.bandwidth() - 4) / 2));
 
     barGroups
@@ -715,7 +728,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('font-size', '10px')
       .text((d) => `${d.avgScore}`);
 
-    // Reaction ms track + bar
     barGroups
       .append('rect')
       .attr('x', margin.left)
@@ -748,7 +760,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
       .attr('font-family', 'JetBrains Mono, monospace')
       .attr('font-size', '10px')
       .text((d) => (d.avgReactionMs > 0 ? `${d.avgReactionMs}ms` : '—'));
-  }, [breakdownRows, barWidth, disciplineFilter]);
+  }, [breakdownRows, barWidth, disciplineFilter, ar]);
 
   const resetAllFilters = () => {
     setModeFilter('all');
@@ -765,16 +777,16 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
           <button
             type="button"
             onClick={onMenu}
-            aria-label="Return to main menu"
+            aria-label={ar ? 'العودة إلى القائمة الرئيسية' : 'Return to main menu'}
             className="inline-flex items-center gap-1.5 min-h-[38px] px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-100 border border-white/15 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
             <LayoutGrid className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-            <span>Menu</span>
+            <span>{ar ? 'القائمة' : 'Menu'}</span>
           </button>
 
           <div className="min-w-0">
             <h1 className="font-display text-base sm:text-lg font-bold text-white truncate">
-              Performance Dashboard
+              {ar ? 'لوحة تحليل الأداء' : 'Performance Dashboard'}
             </h1>
           </div>
         </div>
@@ -782,8 +794,26 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
+            onClick={toggleLang}
+            aria-label={ar ? 'Switch language to English' : 'التبديل إلى العربية'}
+            className="inline-flex items-center justify-center gap-1 min-w-[38px] min-h-[38px] px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-100 border border-white/10 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <Globe className="w-3.5 h-3.5 text-teal-400 shrink-0" aria-hidden="true" />
+            <span>{ar ? 'EN' : 'عربي'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={onToggleMute}
-            aria-label={progress.muted ? 'Unmute audio' : 'Mute audio'}
+            aria-label={
+              ar
+                ? progress.muted
+                  ? 'تشغيل الصوت'
+                  : 'كتم الصوت'
+                : progress.muted
+                ? 'Unmute audio'
+                : 'Mute audio'
+            }
             className="inline-flex items-center justify-center min-w-[38px] min-h-[38px] p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-white/10 transition-colors cursor-pointer"
           >
             {progress.muted ? (
@@ -799,7 +829,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
             className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
             <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-            <span>Play Daily</span>
+            <span>{ar ? 'ابدأ اليومي' : 'Play Daily'}</span>
           </button>
         </div>
       </header>
@@ -810,19 +840,49 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
           {/* Sub-header Context + Controls */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-400">
-              <span className="text-slate-200 font-medium">Cognitive Trend Analytics</span>
+              <span className="inline-flex items-center gap-1.5 text-teal-300 font-semibold">
+                <User className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>
+                  {activeUsername
+                    ? activeUsername
+                    : ar
+                    ? 'زائر (محلي على الجهاز)'
+                    : 'Guest (Local Browser)'}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="text-amber-300 hover:text-amber-200 underline underline-offset-2 cursor-pointer"
+              >
+                {activeUsername ? (ar ? 'تبديل الحساب' : 'Switch User') : ar ? 'دخول' : 'Sign In'}
+              </button>
+              {activeUsername && (
+                <button
+                  type="button"
+                  onClick={onSignOut}
+                  className="inline-flex items-center gap-1 text-slate-400 hover:text-rose-300 cursor-pointer"
+                >
+                  <LogOut className="w-3 h-3" aria-hidden="true" />
+                  <span>{ar ? 'خروج' : 'Sign Out'}</span>
+                </button>
+              )}
               <span aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums">{totalSavedRuns} total runs stored</span>
+              <span className="font-mono tabular-nums">
+                {ar ? `${totalSavedRuns} جولة محفوظة` : `${totalSavedRuns} total runs stored`}
+              </span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums text-amber-300">
-                Streak {streak} {streak === 1 ? 'day' : 'days'}
+                {ar
+                  ? `تتابع ${streak} ${streak === 1 ? 'يوم' : 'أيام'}`
+                  : `Streak ${streak} ${streak === 1 ? 'day' : 'days'}`}
               </span>
             </div>
 
             {/* Interactive Filters */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex p-0.5 rounded-lg bg-slate-900 border border-white/10">
-                {MODE_FILTERS.map((m) => (
+                {modeFilters.map((m) => (
                   <button
                     key={m.id}
                     type="button"
@@ -839,7 +899,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
               </div>
 
               <div className="inline-flex p-0.5 rounded-lg bg-slate-900 border border-white/10">
-                {RANGE_FILTERS.map((r) => (
+                {rangeFilters.map((r) => (
                   <button
                     key={r.id}
                     type="button"
@@ -880,14 +940,14 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                       : 'bg-slate-900 border border-white/10 text-slate-300 hover:text-white'
                   }`}
                 >
-                  {cat}
+                  {getCategoryLabel(cat, lang)}
                 </button>
               ))}
             </div>
 
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 ms-auto">
               <label htmlFor="dash-game-select" className="text-xs text-slate-400">
-                Challenge
+                {ar ? 'التحدي' : 'Challenge'}
               </label>
               <select
                 id="dash-game-select"
@@ -895,28 +955,32 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                 onChange={(e) => setDisciplineFilter(e.target.value as 'all' | DisciplineId)}
                 className="min-h-[36px] px-2.5 py-1 rounded-lg bg-slate-900 border border-white/15 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400 cursor-pointer"
               >
-                <option value="all">All 10 Challenges</option>
-                {ALL_DISCIPLINE_IDS.map((id) => (
-                  <option key={id} value={id}>
-                    {DISCIPLINES[id].title} ({DISCIPLINES[id].category})
-                  </option>
-                ))}
+                <option value="all">{ar ? 'جميع التحديات العشرة' : 'All 10 Challenges'}</option>
+                {ALL_DISCIPLINE_IDS.map((id) => {
+                  const info = getDisciplineInfo(id, lang);
+                  return (
+                    <option key={id} value={id}>
+                      {info.title} ({info.categoryLabel})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
 
           {totalSavedRuns === 0 ? (
-            /* Honest Empty State before first game */
             <div className="rounded-xl bg-[#131C2E] border border-white/10 p-8 sm:p-12 text-center space-y-4">
               <div className="mx-auto w-12 h-12 rounded-xl bg-slate-800 border border-white/10 flex items-center justify-center">
                 <BarChart3 className="w-6 h-6 text-amber-400" aria-hidden="true" />
               </div>
               <div className="space-y-1.5 max-w-md mx-auto">
                 <h2 className="font-display text-xl font-bold text-white">
-                  No Sessions Recorded Yet
+                  {ar ? 'لا توجد جلسات مسجّلة بعد' : 'No Sessions Recorded Yet'}
                 </h2>
                 <p className="text-sm text-slate-300 leading-relaxed">
-                  Complete your first Daily Trio stage or Practice challenge to plot real D3 score and reaction-time trends across modes and dates.
+                  {ar
+                    ? 'أكمل أول مرحلة من التحدي اليومي أو أي جولة تدريب حر لرسم منحنيات النقاط وسرعة الاستجابة بدقة.'
+                    : 'Complete your first Daily Trio stage or Practice challenge to plot real D3 score and reaction-time trends across modes and dates.'}
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
@@ -926,25 +990,26 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-sm transition-colors cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-current" aria-hidden="true" />
-                  <span>Start Daily Trio</span>
+                  <span>{ar ? 'ابدأ التحدي اليومي' : 'Start Daily Trio'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={onMenu}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 font-medium text-sm transition-colors cursor-pointer"
                 >
-                  <span>Browse All 10 Games</span>
+                  <span>{ar ? 'تصفّح التحديات العشرة' : 'Browse All 10 Games'}</span>
                 </button>
               </div>
             </div>
           ) : filteredSessions.length === 0 ? (
-            /* Filtered Empty State */
             <div className="rounded-xl bg-[#131C2E] border border-white/10 p-8 text-center space-y-3">
               <h2 className="font-display text-lg font-bold text-white">
-                No Matching Sessions
+                {ar ? 'لا توجد جلسات مطابقة' : 'No Matching Sessions'}
               </h2>
               <p className="text-sm text-slate-300">
-                Try broadening your mode, category, or date range filters.
+                {ar
+                  ? 'جرّب توسيع خيارات الوضع أو الفئة أو النطاق الزمني.'
+                  : 'Try broadening your mode, category, or date range filters.'}
               </p>
               <button
                 type="button"
@@ -952,7 +1017,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/10 text-xs font-medium cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Reset Filters</span>
+                <span>{ar ? 'إعادة ضبط الفلاتر' : 'Reset Filters'}</span>
               </button>
             </div>
           ) : (
@@ -960,43 +1025,71 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
               {/* 4-Column Single-Elevation KPI Strip */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="p-4 rounded-xl bg-[#131C2E] border border-white/10">
-                  <div className="text-xs text-slate-400">Sessions Matched</div>
+                  <div className="text-xs text-slate-400">
+                    {ar ? 'الجلسات المطابقة' : 'Sessions Matched'}
+                  </div>
                   <div className="text-2xl font-mono font-bold tabular-nums text-white mt-1">
                     {kpis.count}
                   </div>
                   <div className="text-[11px] text-slate-400 mt-1">
-                    {new Set(filteredSessions.map((s) => s.dateKey)).size} active{' '}
-                    {new Set(filteredSessions.map((s) => s.dateKey)).size === 1 ? 'date' : 'dates'}
+                    {ar
+                      ? `خلال ${new Set(filteredSessions.map((s) => s.dateKey)).size} ${
+                          new Set(filteredSessions.map((s) => s.dateKey)).size === 1 ? 'يوم' : 'أيام'
+                        }`
+                      : `${new Set(filteredSessions.map((s) => s.dateKey)).size} active ${
+                          new Set(filteredSessions.map((s) => s.dateKey)).size === 1
+                            ? 'date'
+                            : 'dates'
+                        }`}
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-[#131C2E] border border-white/10">
-                  <div className="text-xs text-slate-400">Average Score</div>
+                  <div className="text-xs text-slate-400">
+                    {ar ? 'متوسط النقاط' : 'Average Score'}
+                  </div>
                   <div className="text-2xl font-mono font-bold tabular-nums text-amber-300 mt-1">
                     {kpis.avgScore.toLocaleString()}
                   </div>
                   <div className="text-[11px] font-mono tabular-nums text-slate-400 mt-1">
-                    Peak {kpis.bestScore.toLocaleString()} pts
+                    {ar
+                      ? `الأعلى ${kpis.bestScore.toLocaleString()} نقطة`
+                      : `Peak ${kpis.bestScore.toLocaleString()} pts`}
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-[#131C2E] border border-white/10">
-                  <div className="text-xs text-slate-400">Avg Reaction Time</div>
-                  <div className="text-2xl font-mono font-bold tabular-nums text-teal-300 mt-1">
+                  <div className="text-xs text-slate-400">
+                    {ar ? 'متوسط زمن الاستجابة' : 'Avg Reaction Time'}
+                  </div>
+                  <div
+                    dir="ltr"
+                    className="text-2xl font-mono font-bold tabular-nums text-teal-300 mt-1 text-start"
+                  >
                     {kpis.avgReactionMs > 0 ? `${kpis.avgReactionMs} ms` : '—'}
                   </div>
                   <div className="text-[11px] font-mono tabular-nums text-slate-400 mt-1">
-                    {kpis.fastestMs > 0 ? `Fastest ${kpis.fastestMs} ms` : 'No speed samples'}
+                    {kpis.fastestMs > 0
+                      ? ar
+                        ? `الأسرع ${kpis.fastestMs} ms`
+                        : `Fastest ${kpis.fastestMs} ms`
+                      : ar
+                      ? 'لا توجد قياسات سرعة'
+                      : 'No speed samples'}
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-[#131C2E] border border-white/10">
-                  <div className="text-xs text-slate-400">Mean Accuracy</div>
+                  <div className="text-xs text-slate-400">
+                    {ar ? 'متوسط الدقة' : 'Mean Accuracy'}
+                  </div>
                   <div className="text-2xl font-mono font-bold tabular-nums text-emerald-400 mt-1">
                     {kpis.avgAccuracy}%
                   </div>
                   <div className="text-[11px] text-slate-400 mt-1">
-                    Best Streak {progress.bestStreak}d
+                    {ar
+                      ? `أطول تتابع ${progress.bestStreak} ${progress.bestStreak === 1 ? 'يوم' : 'أيام'}`
+                      : `Best Streak ${progress.bestStreak}d`}
                   </div>
                 </div>
               </div>
@@ -1008,20 +1101,22 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <h2 className="font-display text-base sm:text-lg font-bold text-white">
-                        Score &amp; Reaction Trends
+                        {ar ? 'منحنى النقاط وسرعة الاستجابة' : 'Score & Reaction Trends'}
                       </h2>
                       <p className="text-xs text-slate-400">
-                        Synchronized progression across dates · Hover or tap points to inspect
+                        {ar
+                          ? 'تطوّر الأداء عبر الأيام · مرّر أو اضغط أي نقطة لمعاينة التفاصيل'
+                          : 'Synchronized progression across dates · Hover or tap points to inspect'}
                       </p>
                     </div>
                     <div className="flex items-center gap-3 text-[11px] text-slate-400">
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-                        <span>Daily</span>
+                        <span>{ar ? 'يومي' : 'Daily'}</span>
                       </span>
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-slate-100 inline-block" />
-                        <span>Practice</span>
+                        <span>{ar ? 'تدريب' : 'Practice'}</span>
                       </span>
                     </div>
                   </div>
@@ -1031,25 +1126,30 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                     <div className="px-3 py-2 rounded-lg bg-slate-900/80 border border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
                         <span className="font-semibold text-white">
-                          {DISCIPLINES[activeInspection.discipline].title}
+                          {getDisciplineInfo(activeInspection.discipline, lang).title}
                         </span>
                         <span className="text-slate-500" aria-hidden="true">·</span>
-                        <span className="text-slate-300 capitalize">
+                        <span className="text-slate-300">
                           {activeInspection.mode === 'daily'
-                            ? 'Daily Trio'
-                            : `Practice (${activeInspection.difficulty})`}
+                            ? ar
+                              ? 'التحدي اليومي'
+                              : 'Daily Trio'
+                            : ar
+                            ? `تدريب (${getDifficultyLabel(activeInspection.difficulty, 'ar')})`
+                            : `Practice (${getDifficultyLabel(activeInspection.difficulty, 'en')})`}
                         </span>
                         <span className="text-slate-500" aria-hidden="true">·</span>
                         <span className="text-slate-400 font-mono">
                           {formatShortDateTime(
                             activeInspection,
-                            new Set(filteredSessions.map((s) => s.dateKey)).size > 1
+                            new Set(filteredSessions.map((s) => s.dateKey)).size > 1,
+                            lang
                           )}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 font-mono tabular-nums shrink-0">
+                      <div dir="ltr" className="flex items-center gap-3 font-mono tabular-nums shrink-0">
                         <span className="text-amber-300 font-semibold">
-                          {activeInspection.score.toLocaleString()} pts
+                          {activeInspection.score.toLocaleString()} {ar ? 'نقطة' : 'pts'}
                         </span>
                         <span className="text-teal-300 font-semibold">
                           {activeInspection.avgReactionMs > 0
@@ -1061,7 +1161,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                     </div>
                   )}
 
-                  <div ref={trendContainerRef} className="w-full overflow-hidden">
+                  <div ref={trendContainerRef} dir="ltr" className="w-full overflow-hidden">
                     <svg ref={trendSvgRef} className="w-full block" />
                   </div>
                 </section>
@@ -1071,11 +1171,15 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h2 className="font-display text-base sm:text-lg font-bold text-white">
-                        Mode &amp; Game Breakdown
+                        {ar ? 'تفصيل الأداء' : 'Mode & Game Breakdown'}
                       </h2>
                       <p className="text-xs text-slate-400">
                         {breakdownView === 'byChallenge'
-                          ? 'Click any challenge bar to filter'
+                          ? ar
+                            ? 'اضغط أي شريط تحدٍّ لتصفية البيانات'
+                            : 'Click any challenge bar to filter'
+                          : ar
+                          ? 'مقارنة التحدي اليومي بمستويات التدريب الحر'
                           : 'Comparing Daily vs Practice difficulty tiers'}
                       </p>
                     </div>
@@ -1090,7 +1194,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                             : 'text-slate-300 hover:text-white'
                         }`}
                       >
-                        By Game
+                        {ar ? 'حسب التحدي' : 'By Game'}
                       </button>
                       <button
                         type="button"
@@ -1101,7 +1205,7 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                             : 'text-slate-300 hover:text-white'
                         }`}
                       >
-                        By Mode
+                        {ar ? 'حسب الوضع' : 'By Mode'}
                       </button>
                     </div>
                   </div>
@@ -1111,13 +1215,19 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                       <span className="font-sans font-semibold text-white truncate">
                         {hoveredGroup.label}
                       </span>
-                      <span className="text-slate-300 shrink-0">
-                        Best {hoveredGroup.bestScore} · {hoveredGroup.avgReactionMs} ms
+                      <span dir="ltr" className="text-slate-300 shrink-0">
+                        {ar
+                          ? `الأعلى ${hoveredGroup.bestScore} · ${hoveredGroup.avgReactionMs} ms`
+                          : `Best ${hoveredGroup.bestScore} · ${hoveredGroup.avgReactionMs} ms`}
                       </span>
                     </div>
                   )}
 
-                  <div ref={barContainerRef} className="w-full flex-1 overflow-y-auto clean-scroll max-h-[320px]">
+                  <div
+                    ref={barContainerRef}
+                    dir="ltr"
+                    className="w-full flex-1 overflow-y-auto clean-scroll max-h-[320px]"
+                  >
                     <svg ref={barSvgRef} className="w-full block" />
                   </div>
                 </section>
@@ -1127,23 +1237,37 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
               <section className="rounded-xl bg-[#131C2E] border border-white/10 overflow-hidden">
                 <div className="px-4 sm:px-5 py-3 border-b border-white/10 flex items-center justify-between">
                   <h2 className="font-display text-sm sm:text-base font-bold text-white">
-                    Recent Sessions
+                    {ar ? 'أحدث الجلسات' : 'Recent Sessions'}
                   </h2>
                   <span className="text-xs font-mono tabular-nums text-slate-400">
-                    Showing latest {Math.min(20, filteredSessions.length)} of {filteredSessions.length}
+                    {ar
+                      ? `عرض آخر ${Math.min(20, filteredSessions.length)} من أصل ${filteredSessions.length}`
+                      : `Showing latest ${Math.min(20, filteredSessions.length)} of ${filteredSessions.length}`}
                   </span>
                 </div>
 
                 <div className="overflow-x-auto clean-scroll">
-                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <table className="w-full text-start border-collapse text-xs sm:text-sm">
                     <thead>
                       <tr className="border-b border-white/10 text-[11px] text-slate-400">
-                        <th className="py-2.5 px-4 font-medium">Date</th>
-                        <th className="py-2.5 px-3 font-medium">Challenge</th>
-                        <th className="py-2.5 px-3 font-medium">Mode</th>
-                        <th className="py-2.5 px-3 font-medium text-right">Score</th>
-                        <th className="py-2.5 px-3 font-medium text-right">Reaction</th>
-                        <th className="py-2.5 px-4 font-medium text-right">Accuracy</th>
+                        <th className="py-2.5 px-4 font-medium text-start">
+                          {ar ? 'التاريخ' : 'Date'}
+                        </th>
+                        <th className="py-2.5 px-3 font-medium text-start">
+                          {ar ? 'التحدي' : 'Challenge'}
+                        </th>
+                        <th className="py-2.5 px-3 font-medium text-start">
+                          {ar ? 'الوضع' : 'Mode'}
+                        </th>
+                        <th className="py-2.5 px-3 font-medium text-end">
+                          {ar ? 'النقاط' : 'Score'}
+                        </th>
+                        <th className="py-2.5 px-3 font-medium text-end">
+                          {ar ? 'الاستجابة' : 'Reaction'}
+                        </th>
+                        <th className="py-2.5 px-4 font-medium text-end">
+                          {ar ? 'الدقة' : 'Accuracy'}
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -1156,24 +1280,31 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
                             onMouseEnter={() => setInspectedEntry(entry)}
                             className="hover:bg-slate-800/50 transition-colors"
                           >
-                            <td className="py-2.5 px-4 text-slate-300 whitespace-nowrap font-mono text-xs">
-                              {formatReadableDate(entry.dateKey)}
+                            <td className="py-2.5 px-4 text-slate-300 whitespace-nowrap font-mono text-xs text-start">
+                              {formatReadableDate(entry.dateKey, lang)}
                             </td>
-                            <td className="py-2.5 px-3 font-medium text-white whitespace-nowrap">
-                              {DISCIPLINES[entry.discipline].title}
+                            <td className="py-2.5 px-3 font-medium text-white whitespace-nowrap text-start">
+                              {getDisciplineInfo(entry.discipline, lang).title}
                             </td>
-                            <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap capitalize text-xs">
+                            <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap text-xs text-start">
                               {entry.mode === 'daily'
-                                ? 'Daily Trio'
-                                : `Practice · ${entry.difficulty}`}
+                                ? ar
+                                  ? 'التحدي اليومي'
+                                  : 'Daily Trio'
+                                : ar
+                                ? `تدريب · ${getDifficultyLabel(entry.difficulty, 'ar')}`
+                                : `Practice · ${getDifficultyLabel(entry.difficulty, 'en')}`}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono tabular-nums font-semibold text-amber-300 whitespace-nowrap">
+                            <td className="py-2.5 px-3 text-end font-mono tabular-nums font-semibold text-amber-300 whitespace-nowrap">
                               {entry.score.toLocaleString()}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono tabular-nums text-teal-300 whitespace-nowrap">
+                            <td
+                              dir="ltr"
+                              className="py-2.5 px-3 text-end font-mono tabular-nums text-teal-300 whitespace-nowrap"
+                            >
                               {entry.avgReactionMs > 0 ? `${entry.avgReactionMs} ms` : '—'}
                             </td>
-                            <td className="py-2.5 px-4 text-right font-mono tabular-nums text-emerald-400 whitespace-nowrap">
+                            <td className="py-2.5 px-4 text-end font-mono tabular-nums text-emerald-400 whitespace-nowrap">
                               {entry.accuracy}%
                             </td>
                           </tr>

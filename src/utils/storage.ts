@@ -1,4 +1,5 @@
 import {
+  ALL_DISCIPLINE_IDS,
   DailyCompletionRecord,
   Difficulty,
   DisciplineId,
@@ -9,37 +10,59 @@ import {
 } from '../types/game';
 import { getPreviousDateKey } from './seededRandom';
 
-const STORAGE_KEY = 'mnemon_progress_v1';
+const LEGACY_STORAGE_KEY = 'mnemon_progress_v1';
+const SCOPED_STORAGE_PREFIX = 'mnemon_progress_v2:';
 const MAX_HISTORY_ENTRIES = 500;
 
-const DEFAULT_BEST: PersonalBest = {
+export const DEFAULT_BEST: PersonalBest = {
   bestScore: 0,
   fastestAvgMs: 0,
   bestAccuracy: 0,
   gamesPlayed: 0,
 };
 
-function createDefaultProgress(): PlayerProgress {
+export function createDefaultBests(): Record<DisciplineId, PersonalBest> {
+  return {
+    pattern: { ...DEFAULT_BEST },
+    tempo: { ...DEFAULT_BEST },
+    sequence: { ...DEFAULT_BEST },
+    stroop: { ...DEFAULT_BEST },
+    pairs: { ...DEFAULT_BEST },
+    pulse: { ...DEFAULT_BEST },
+    matrix: { ...DEFAULT_BEST },
+    digitspan: { ...DEFAULT_BEST },
+    cipher: { ...DEFAULT_BEST },
+    ruleswitch: { ...DEFAULT_BEST },
+  };
+}
+
+export function createDefaultProgress(): PlayerProgress {
   return {
     currentStreak: 0,
     bestStreak: 0,
     lastCompletedDate: null,
     dailyRecords: {},
-    personalBests: {
-      pattern: { ...DEFAULT_BEST },
-      tempo: { ...DEFAULT_BEST },
-      sequence: { ...DEFAULT_BEST },
-      stroop: { ...DEFAULT_BEST },
-      pairs: { ...DEFAULT_BEST },
-      pulse: { ...DEFAULT_BEST },
-      matrix: { ...DEFAULT_BEST },
-      digitspan: { ...DEFAULT_BEST },
-      cipher: { ...DEFAULT_BEST },
-      ruleswitch: { ...DEFAULT_BEST },
-    },
+    personalBests: createDefaultBests(),
     sessionHistory: [],
     muted: false,
   };
+}
+
+function getStorageKey(scopeKey: string): string {
+  return `${SCOPED_STORAGE_PREFIX}${scopeKey || 'guest'}`;
+}
+
+function normalizePersonalBests(
+  raw?: Partial<Record<DisciplineId, Partial<PersonalBest>>>
+): Record<DisciplineId, PersonalBest> {
+  const result = createDefaultBests();
+  for (const id of ALL_DISCIPLINE_IDS) {
+    result[id] = {
+      ...DEFAULT_BEST,
+      ...(raw?.[id] ?? {}),
+    };
+  }
+  return result;
 }
 
 function backfillHistoryFromDailyRecords(
@@ -50,7 +73,7 @@ function backfillHistoryFromDailyRecords(
   for (const rec of records) {
     rec.stages.forEach((stage, idx) => {
       entries.push({
-        id: `backfill-${rec.dateKey}-${stage.discipline}-${idx}`,
+        id: `backfill_${rec.dateKey}_${stage.discipline}_${idx}`,
         dateKey: rec.dateKey,
         timestamp: rec.completedAt + idx * 1000,
         mode: 'daily',
@@ -66,10 +89,16 @@ function backfillHistoryFromDailyRecords(
   return entries.slice(-MAX_HISTORY_ENTRIES);
 }
 
-export function loadProgress(): PlayerProgress {
+export function loadProgress(scopeKey = 'guest'): PlayerProgress {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getStorageKey(scopeKey);
+    let raw = localStorage.getItem(key);
+    // Migrate legacy single-user storage only into the guest scope when v2 guest is empty
+    if (!raw && scopeKey === 'guest') {
+      raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    }
     if (!raw) return createDefaultProgress();
+
     const parsed = JSON.parse(raw) as Partial<PlayerProgress>;
     const dailyRecords = parsed.dailyRecords ?? {};
     const sessionHistory = Array.isArray(parsed.sessionHistory)
@@ -79,20 +108,9 @@ export function loadProgress(): PlayerProgress {
     return {
       currentStreak: parsed.currentStreak ?? 0,
       bestStreak: parsed.bestStreak ?? 0,
-      lastCompletedDate: parsed.lastCompletedDate ?? null,
+      lastCompletedDate: parsed.lastCompletedDate || null,
       dailyRecords,
-      personalBests: {
-        pattern: { ...DEFAULT_BEST, ...parsed.personalBests?.pattern },
-        tempo: { ...DEFAULT_BEST, ...parsed.personalBests?.tempo },
-        sequence: { ...DEFAULT_BEST, ...parsed.personalBests?.sequence },
-        stroop: { ...DEFAULT_BEST, ...parsed.personalBests?.stroop },
-        pairs: { ...DEFAULT_BEST, ...parsed.personalBests?.pairs },
-        pulse: { ...DEFAULT_BEST, ...parsed.personalBests?.pulse },
-        matrix: { ...DEFAULT_BEST, ...parsed.personalBests?.matrix },
-        digitspan: { ...DEFAULT_BEST, ...parsed.personalBests?.digitspan },
-        cipher: { ...DEFAULT_BEST, ...parsed.personalBests?.cipher },
-        ruleswitch: { ...DEFAULT_BEST, ...parsed.personalBests?.ruleswitch },
-      },
+      personalBests: normalizePersonalBests(parsed.personalBests),
       sessionHistory,
       muted: Boolean(parsed.muted),
     };
@@ -101,9 +119,9 @@ export function loadProgress(): PlayerProgress {
   }
 }
 
-export function saveProgress(progress: PlayerProgress): void {
+export function saveProgress(progress: PlayerProgress, scopeKey = 'guest'): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+    localStorage.setItem(getStorageKey(scopeKey), JSON.stringify(progress));
   } catch {
     // Ignore storage quota / privacy mode failures gracefully
   }
@@ -117,10 +135,15 @@ export function getEffectiveStreak(progress: PlayerProgress, todayKey: string): 
   return 0;
 }
 
-export function recordDailyCompletion(
+export function buildDailyCompletionUpdate(
   progress: PlayerProgress,
-  record: DailyCompletionRecord
-): PlayerProgress {
+  record: DailyCompletionRecord,
+  scopeKey = 'guest'
+): {
+  updated: PlayerProgress;
+  bestDailyRecord: DailyCompletionRecord;
+  newEntries: SessionLogEntry[];
+} {
   const alreadyCompletedToday = Boolean(progress.dailyRecords[record.dateKey]);
   const yesterdayKey = getPreviousDateKey(record.dateKey);
 
@@ -148,7 +171,7 @@ export function recordDailyCompletion(
   }
 
   const newEntries: SessionLogEntry[] = record.stages.map((stage, idx) => ({
-    id: `daily-${record.dateKey}-${record.completedAt}-${stage.discipline}-${idx}`,
+    id: `daily_${record.dateKey}_${record.completedAt}_${stage.discipline}_${idx}`,
     dateKey: record.dateKey,
     timestamp: record.completedAt + idx * 1000,
     mode: 'daily',
@@ -177,19 +200,23 @@ export function recordDailyCompletion(
     sessionHistory: [...progress.sessionHistory, ...newEntries].slice(-MAX_HISTORY_ENTRIES),
   };
 
-  saveProgress(updated);
-  return updated;
+  saveProgress(updated, scopeKey);
+  return { updated, bestDailyRecord, newEntries };
 }
 
-export function recordPracticeCompletion(
+export function buildPracticeCompletionUpdate(
   progress: PlayerProgress,
   result: StageResult,
   dateKey: string,
-  difficulty: Difficulty
-): PlayerProgress {
+  difficulty: Difficulty,
+  scopeKey = 'guest'
+): {
+  updated: PlayerProgress;
+  entry: SessionLogEntry;
+} {
   const now = Date.now();
   const entry: SessionLogEntry = {
-    id: `practice-${dateKey}-${now}-${result.discipline}`,
+    id: `practice_${dateKey}_${now}_${result.discipline}`,
     dateKey,
     timestamp: now,
     mode: 'practice',
@@ -214,8 +241,8 @@ export function recordPracticeCompletion(
     },
     sessionHistory: [...progress.sessionHistory, entry].slice(-MAX_HISTORY_ENTRIES),
   };
-  saveProgress(updated);
-  return updated;
+  saveProgress(updated, scopeKey);
+  return { updated, entry };
 }
 
 function mergeDisciplineBest(

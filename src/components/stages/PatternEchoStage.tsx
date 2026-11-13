@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clock, Eye, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng, shuffleWithRng } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 
@@ -62,6 +63,9 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const configs = useMemo(() => getRoundConfigs(difficulty), [difficulty]);
   const totalRounds = configs.length;
 
@@ -96,7 +100,9 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
   const [streak, setStreak] = useState(0);
   const [hintsLeft, setHintsLeft] = useState(2);
   const [roundMistakes, setRoundMistakes] = useState(0);
-  const [statusNote, setStatusNote] = useState<string>('Watch the gold tiles illuminate');
+  const [statusNote, setStatusNote] = useState<string>(() =>
+    ar ? 'راقب إضاءة المربعات الذهبية' : 'Watch the gold tiles illuminate'
+  );
 
   const correctTapsRef = useRef(0);
   const totalTapsRef = useRef(0);
@@ -188,14 +194,17 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
     [roundIdx, totalRounds, finishStage]
   );
 
-  // Sequential wave illumination + Memorize timer (pause-safe)
   useEffect(() => {
     if (phase !== 'MEMORIZE') return;
     studyElapsedRef.current = 0;
     setStudyProgress(1);
     setWaveRevealedCount(0);
     setStatusNote(
-      currentCfg.decoyCount > 0
+      ar
+        ? currentCfg.decoyCount > 0
+          ? `احفظ ${currentCfg.targetCount} مربعات ذهبية وتجاهل ${currentCfg.decoyCount} علامة وردية`
+          : `احفظ مواقع ${currentCfg.targetCount} مربعات ذهبية`
+        : currentCfg.decoyCount > 0
         ? `Memorize ${currentCfg.targetCount} Gold tiles · Ignore ${currentCfg.decoyCount} Rose decoys`
         : `Memorize ${currentCfg.targetCount} Gold tiles`
     );
@@ -232,7 +241,9 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
           setRecallProgress(1);
           recallRemainingMsRef.current = currentCfg.recallMs;
           setRecallSecondsLeft(Math.ceil(currentCfg.recallMs / 1000));
-          setStatusNote('Tap only the Gold tile positions');
+          setStatusNote(
+            ar ? 'اضغط مواضع المربعات الذهبية فقط' : 'Tap only the Gold tile positions'
+          );
           lastEventTimeRef.current = performance.now();
           sound.playTick();
           return;
@@ -244,9 +255,8 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, currentCfg]);
+  }, [phase, roundIdx, currentCfg, ar]);
 
-  // Live Recall Countdown Fuse (pause-safe)
   useEffect(() => {
     if (phase !== 'RECALL') return;
 
@@ -274,7 +284,9 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
           streakRef.current = 0;
           setStreak(0);
           sound.playMiss();
-          setStatusNote('Time expired — reviewing missed pattern');
+          setStatusNote(
+            ar ? 'انتهى الوقت — مراجعة المواقع الفائتة' : 'Time expired — reviewing missed pattern'
+          );
           advanceToNextRound(1100);
           return;
         }
@@ -285,7 +297,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, roundIdx, currentCfg.recallMs, advanceToNextRound]);
+  }, [phase, roundIdx, currentCfg.recallMs, advanceToNextRound, ar]);
 
   const handleTileSelect = useCallback(
     (idx: number) => {
@@ -319,7 +331,11 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
         setScore(scoreRef.current);
 
         sound.playTileStep(nextFound.size - 1);
-        setStatusNote(`Matched ${nextFound.size}/${currentData.targets.size} · ${reactionMs} ms`);
+        setStatusNote(
+          ar
+            ? `تطابق ${nextFound.size}/${currentData.targets.size} · ${reactionMs} ms`
+            : `Matched ${nextFound.size}/${currentData.targets.size} · ${reactionMs} ms`
+        );
 
         if (nextFound.size === currentData.targets.size) {
           completedRoundsRef.current += 1;
@@ -328,7 +344,11 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
           scoreRef.current += cleanRoundBonus + timeBonus;
           setScore(scoreRef.current);
           setStatusNote(
-            roundMistakes === 0
+            ar
+              ? roundMistakes === 0
+                ? `استرجاع مثالي · +${cleanRoundBonus + timeBonus} مكافأة`
+                : `تم الاجتياز · +${timeBonus} مكافأة الوقت`
+              : roundMistakes === 0
               ? `Flawless echo · +${cleanRoundBonus + timeBonus} speed & accuracy bonus`
               : `Cleared · +${timeBonus} time bonus`
           );
@@ -347,14 +367,22 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
 
         if (nextMistakes >= 3) {
           setStatusNote(
-            hitDecoy
+            ar
+              ? hitDecoy
+                ? 'أصبت علامة خطر — كشف النمط الكامل'
+                : '3 أخطاء — كشف النمط الكامل'
+              : hitDecoy
               ? 'Decoy hazard triggered — reviewing pattern'
               : '3 misses — reviewing full pattern'
           );
           advanceToNextRound(1100);
         } else {
           setStatusNote(
-            hitDecoy
+            ar
+              ? hitDecoy
+                ? `مشتت وردي! متبقي ${3 - nextMistakes} محاولة`
+                : `خارج النمط · متبقي ${3 - nextMistakes} محاولات`
+              : hitDecoy
               ? `Rose decoy hazard! ${3 - nextMistakes} chance left`
               : `Off target · ${3 - nextMistakes} tries left`
           );
@@ -370,6 +398,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
       hintTile,
       roundMistakes,
       advanceToNextRound,
+      ar,
     ]
   );
 
@@ -382,8 +411,10 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
     setHintsLeft((h) => h - 1);
     hintsUsedRef.current += 1;
     sound.playHint();
-    setStatusNote('Beacon active on one unfound gold tile');
-  }, [isPaused, phase, hintsLeft, currentData, foundTiles]);
+    setStatusNote(
+      ar ? 'تم تمييز موقع أحد المربعات الذهبية' : 'Beacon active on one unfound gold tile'
+    );
+  }, [isPaused, phase, hintsLeft, currentData, foundTiles, ar]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -432,15 +463,22 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
         <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-2">
           <span>
             {phase === 'MEMORIZE'
-              ? `Memorize ${currentCfg.targetCount} Gold Tiles`
+              ? ar
+                ? `احفظ ${currentCfg.targetCount} مربعات ذهبية`
+                : `Memorize ${currentCfg.targetCount} Gold Tiles`
               : phase === 'RECALL'
-              ? `Recall ${foundTiles.size} / ${currentData.targets.size}`
+              ? ar
+                ? `استرجاع ${foundTiles.size} / ${currentData.targets.size}`
+                : `Recall ${foundTiles.size} / ${currentData.targets.size}`
+              : ar
+              ? 'اكتملت الجولة'
               : 'Round Complete'}
           </span>
 
           <div className="flex items-center gap-3 font-mono tabular-nums">
             {phase === 'RECALL' && (
               <span
+                dir="ltr"
                 className={`inline-flex items-center gap-1 ${
                   recallSecondsLeft <= 3 ? 'text-rose-400 font-bold' : 'text-teal-300'
                 }`}
@@ -450,14 +488,16 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
               </span>
             )}
             <span className="text-slate-400">
-              Round {roundIdx + 1}/{totalRounds} · {currentCfg.gridSize}×{currentCfg.gridSize}
+              {ar
+                ? `الجولة ${roundIdx + 1}/${totalRounds} · ${currentCfg.gridSize}×${currentCfg.gridSize}`
+                : `Round ${roundIdx + 1}/${totalRounds} · ${currentCfg.gridSize}×${currentCfg.gridSize}`}
             </span>
           </div>
         </div>
 
         <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-[transform] duration-75 origin-left ${
+            className={`h-full rounded-full transition-[transform] duration-75 ltr:origin-left rtl:origin-right ${
               phase === 'MEMORIZE'
                 ? 'bg-amber-400'
                 : phase === 'RECALL'
@@ -479,11 +519,12 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
         </div>
       </div>
 
-      {/* Tactile Keycap Board */}
+      {/* Tactile Keycap Board (kept LTR for stable arrow-key stepping) */}
       <div
+        dir="ltr"
         className="p-3 sm:p-5 rounded-2xl bg-[#131C2E] border border-white/10 shadow-2xl"
         role="grid"
-        aria-label="Pattern Echo memory grid"
+        aria-label={ar ? 'شبكة ذاكرة النمط' : 'Pattern Echo memory grid'}
       >
         <div
           className="grid gap-1.5 sm:gap-3"
@@ -511,7 +552,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
                   setFocusedIndex(idx);
                   handleTileSelect(idx);
                 }}
-                aria-label={`Tile ${idx + 1}`}
+                aria-label={ar ? `مربع ${idx + 1}` : `Tile ${idx + 1}`}
                 className={`relative flex items-center justify-center rounded-xl transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ${tileSizeClass} ${
                   isFound
                     ? 'bg-[#F8FAFC] text-slate-900 border-2 border-teal-400 border-b-4 shadow-lg animate-tile-pop'
@@ -560,7 +601,7 @@ export const PatternEchoStage: React.FC<PatternEchoStageProps> = ({
           className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Hint ({hintsLeft})</span>
+          <span>{ar ? `تلميح (${hintsLeft})` : `Hint (${hintsLeft})`}</span>
         </button>
       </div>
     </div>

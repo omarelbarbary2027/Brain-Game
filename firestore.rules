@@ -1,0 +1,232 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidDateKey(dateKey) {
+      return dateKey is string && dateKey.size() == 10 && dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidUsername(name) {
+      return name is string && name.size() >= 3 && name.size() <= 24 && name.matches('^[a-zA-Z0-9_.\\-]+$');
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+        'uid',
+        'username',
+        'currentStreak',
+        'bestStreak',
+        'lastCompletedDate',
+        'muted',
+        'personalBests',
+        'createdAt',
+        'updatedAt'
+      ]) && data.keys().hasOnly([
+        'uid',
+        'username',
+        'currentStreak',
+        'bestStreak',
+        'lastCompletedDate',
+        'muted',
+        'personalBests',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.uid is string
+      && data.uid.size() <= 128
+      && data.uid == request.auth.uid
+      && data.uid == userId
+      && isValidUsername(data.username)
+      && data.currentStreak is int && data.currentStreak >= 0
+      && data.bestStreak is int && data.bestStreak >= 0
+      && data.lastCompletedDate is string && data.lastCompletedDate.size() <= 10
+      && (data.lastCompletedDate == '' || isValidDateKey(data.lastCompletedDate))
+      && data.muted is bool
+      && data.personalBests is map && data.personalBests.size() <= 12
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidDailyRecord(data, userId, dateKey) {
+      return data.keys().hasAll([
+        'uid',
+        'dateKey',
+        'dailyNumber',
+        'totalScore',
+        'avgReactionMs',
+        'overallAccuracy',
+        'completedAt',
+        'stages',
+        'updatedAt'
+      ]) && data.keys().hasOnly([
+        'uid',
+        'dateKey',
+        'dailyNumber',
+        'totalScore',
+        'avgReactionMs',
+        'overallAccuracy',
+        'completedAt',
+        'stages',
+        'updatedAt'
+      ])
+      && data.uid is string
+      && data.uid.size() <= 128
+      && data.uid == request.auth.uid
+      && data.uid == userId
+      && isValidDateKey(data.dateKey)
+      && data.dateKey == dateKey
+      && data.dailyNumber is int && data.dailyNumber >= 1
+      && data.totalScore is int && data.totalScore >= 0
+      && data.avgReactionMs is int && data.avgReactionMs >= 0
+      && data.overallAccuracy is int && data.overallAccuracy >= 0 && data.overallAccuracy <= 100
+      && data.completedAt is int && data.completedAt > 0
+      && data.stages is list && data.stages.size() >= 1 && data.stages.size() <= 5
+      && data.stages[0] is map
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidSessionEntry(data, userId) {
+      return data.keys().hasAll([
+        'uid',
+        'dateKey',
+        'timestamp',
+        'mode',
+        'difficulty',
+        'discipline',
+        'score',
+        'avgReactionMs',
+        'accuracy',
+        'bestStreak',
+        'createdAt'
+      ]) && data.keys().hasOnly([
+        'uid',
+        'dateKey',
+        'timestamp',
+        'mode',
+        'difficulty',
+        'discipline',
+        'score',
+        'avgReactionMs',
+        'accuracy',
+        'bestStreak',
+        'createdAt'
+      ])
+      && data.uid is string
+      && data.uid.size() <= 128
+      && data.uid == request.auth.uid
+      && data.uid == userId
+      && isValidDateKey(data.dateKey)
+      && data.timestamp is int && data.timestamp > 0
+      && data.mode is string && data.mode.size() <= 16 && (data.mode == 'daily' || data.mode == 'practice')
+      && data.difficulty is string && data.difficulty.size() <= 16
+      && (data.difficulty == 'relaxed' || data.difficulty == 'standard' || data.difficulty == 'master')
+      && data.discipline is string && data.discipline.size() >= 1 && data.discipline.size() <= 20
+      && data.discipline in ['pattern', 'tempo', 'sequence', 'stroop', 'pairs', 'pulse', 'matrix', 'digitspan', 'cipher', 'ruleswitch']
+      && data.score is int && data.score >= 0
+      && data.avgReactionMs is int && data.avgReactionMs >= 0
+      && data.accuracy is int && data.accuracy >= 0 && data.accuracy <= 100
+      && data.bestStreak is int && data.bestStreak >= 0
+      && data.createdAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'username',
+          'currentStreak',
+          'bestStreak',
+          'lastCompletedDate',
+          'muted',
+          'personalBests',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
+
+      match /dailyRecords/{dateKey} {
+        allow get: if isValidId(userId) && isValidDateKey(dateKey) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.uid == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidDateKey(dateKey)
+          && isOwner(userId)
+          && isValidDailyRecord(incoming(), userId, dateKey)
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        allow update: if isValidId(userId)
+          && isValidDateKey(dateKey)
+          && isOwner(userId)
+          && isValidDailyRecord(incoming(), userId, dateKey)
+          && incoming().uid == existing().uid
+          && incoming().dateKey == existing().dateKey
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'dailyNumber',
+            'totalScore',
+            'avgReactionMs',
+            'overallAccuracy',
+            'completedAt',
+            'stages',
+            'updatedAt'
+          ])
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        allow delete: if false;
+      }
+
+      match /sessions/{sessionId} {
+        allow get: if isValidId(userId) && isValidId(sessionId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.uid == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(sessionId)
+          && isOwner(userId)
+          && isValidSessionEntry(incoming(), userId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}

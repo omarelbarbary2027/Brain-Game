@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, Check, Clock, Eye, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng, randInt } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
@@ -32,7 +33,6 @@ function makeExpression(
   harder: boolean
 ): { expr: string; val: number } {
   if (targetOffset !== null) {
-    // Generate an expression equal to targetOffset
     const split = randInt(3, Math.max(4, Math.floor(targetOffset / 2)), rng);
     if (rng() < 0.5 && targetOffset > 8) {
       return { expr: `${targetOffset - split} + ${split}`, val: targetOffset };
@@ -71,7 +71,6 @@ function generatePrompts(seed: string, difficulty: Difficulty): {
     const rule: PulseRule = i >= flipIdx ? 'lower' : 'higher';
     const left = makeExpression(null, rng, harder || i >= flipIdx);
 
-    // ~15% exact ties, otherwise tight close-call gaps (1 to 5 apart) for real challenge!
     const makeTie = rng() < 0.16;
     let right: { expr: string; val: number };
     if (makeTie) {
@@ -112,6 +111,9 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const { prompts, flipIdx } = useMemo(
     () => generatePrompts(seed, difficulty),
     [seed, difficulty]
@@ -235,10 +237,12 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
     sound.playMiss();
     setFeedback({
       correct: false,
-      text: `Time expired · ${current.leftVal} vs ${current.rightVal}`,
+      text: ar
+        ? `انتهى الوقت · ${current.leftVal} مقابل ${current.rightVal}`
+        : `Time expired · ${current.leftVal} vs ${current.rightVal}`,
     });
     setTimeout(advanceNext, 260);
-  }, [phase, current.leftVal, current.rightVal, advanceNext]);
+  }, [phase, current.leftVal, current.rightVal, advanceNext, ar]);
 
   useEffect(() => {
     if (phase !== 'ACTIVE') return;
@@ -291,7 +295,9 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
         sound.playSuccess(nextStreak);
         setFeedback({
           correct: true,
-          text: `+${pts} pts · ${current.leftVal} vs ${current.rightVal} · ${reactionMs} ms`,
+          text: ar
+            ? `+${pts} نقطة · ${current.leftVal} / ${current.rightVal} · ${reactionMs} ms`
+            : `+${pts} pts · ${current.leftVal} vs ${current.rightVal} · ${reactionMs} ms`,
         });
       } else {
         streakRef.current = 0;
@@ -305,7 +311,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
 
       setTimeout(advanceNext, 180);
     },
-    [isPaused, phase, current, advanceNext]
+    [isPaused, phase, current, advanceNext, ar]
   );
 
   const handleUseHint = useCallback(() => {
@@ -356,9 +362,15 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
             }
           >
             {phase === 'RULE_SHIFT'
-              ? 'Rule Flip Incoming'
+              ? ar
+                ? 'انقلاب القاعدة قادم'
+                : 'Rule Flip Incoming'
               : current.rule === 'higher'
-              ? 'Pick the HIGHER Value (or Equal)'
+              ? ar
+                ? 'اختر القيمة الأكبر (أو متساوٍ)'
+                : 'Pick the HIGHER Value (or Equal)'
+              : ar
+              ? 'انقلبت القاعدة: اختر القيمة الأقل (أو متساوٍ)'
               : 'Flipped: Pick the LOWER Value (or Equal)'}
           </span>
           <span className="font-mono tabular-nums text-slate-400">
@@ -368,7 +380,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
 
         <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-transform duration-150 origin-left ${
+            className={`h-full rounded-full transition-transform duration-150 ltr:origin-left rtl:origin-right ${
               current.rule === 'lower' ? 'bg-amber-400' : 'bg-teal-400'
             }`}
             style={{ transform: `scaleX(${(idx + 1) / total})` }}
@@ -380,32 +392,47 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
       <div className="w-full max-w-lg min-h-[215px] flex items-center justify-center">
         {phase === 'RULE_SHIFT' ? (
           <div className="w-full rounded-2xl bg-[#131C2E] border-2 border-amber-400/80 p-6 text-center shadow-2xl animate-card-enter space-y-3">
-            <div className="text-xs font-mono text-amber-300">PHASE 2 · RULE FLIP</div>
+            <div className="text-xs font-mono text-amber-300">
+              {ar ? 'المرحلة 2 · انقلاب القاعدة' : 'PHASE 2 · RULE FLIP'}
+            </div>
             <h3 className="font-display text-2xl font-bold text-white">
-              Now Pick LOWER
+              {ar ? 'اختر القيمة الأقل الآن' : 'Now Pick LOWER'}
             </h3>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Suppress your higher-number reflex. Select the expression with the{' '}
-              <strong className="text-amber-300">LOWER</strong> result, or{' '}
-              <strong className="text-white">Equal</strong> if they tie.
+              {ar ? (
+                <>
+                  تغلّب على رد فعلك المعتاد واختر التعبير ذو الناتج{' '}
+                  <strong className="text-amber-300">الأقل</strong>، أو{' '}
+                  <strong className="text-white">متساوٍ</strong> عند التطابق.
+                </>
+              ) : (
+                <>
+                  Suppress your higher-number reflex. Select the expression with the{' '}
+                  <strong className="text-amber-300">LOWER</strong> result, or{' '}
+                  <strong className="text-white">Equal</strong> if they tie.
+                </>
+              )}
             </p>
             <button
               type="button"
               onClick={resumeAfterShift}
               className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-semibold text-xs cursor-pointer"
             >
-              Continue (Space)
+              {ar ? 'متابعة (Space)' : 'Continue (Space)'}
             </button>
           </div>
         ) : (
           <div key={current.id} className="w-full space-y-3 animate-card-enter">
-            <div className="grid grid-cols-2 gap-3">
+            {/* Cards kept LTR so Left/Right stay aligned with ArrowLeft / ArrowRight */}
+            <div dir="ltr" className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => handlePick('left')}
                 className="h-32 sm:h-40 rounded-2xl bg-[#F8FAFC] hover:bg-white text-slate-950 border-2 border-white border-b-4 border-b-slate-300 shadow-xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-[0.98] cursor-pointer"
               >
-                <span className="text-xs font-medium text-slate-500">Left</span>
+                <span className="text-xs font-medium text-slate-500">
+                  {ar ? 'اليسار' : 'Left'}
+                </span>
                 <span className="font-mono text-xl sm:text-3xl font-bold tabular-nums">
                   {current.leftExpr}
                 </span>
@@ -421,17 +448,18 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
                 onClick={() => handlePick('right')}
                 className="h-32 sm:h-40 rounded-2xl bg-[#131C2E] hover:bg-slate-800 text-white border-2 border-white/15 border-b-4 border-b-slate-950 shadow-xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-[0.98] cursor-pointer"
               >
-                <span className="text-xs font-medium text-slate-400">Right</span>
+                <span className="text-xs font-medium text-slate-400">
+                  {ar ? 'اليمين' : 'Right'}
+                </span>
                 <span className="font-mono text-xl sm:text-3xl font-bold tabular-nums">
                   {current.rightExpr}
                 </span>
               </button>
             </div>
 
-            {/* Live Card Fuse */}
             <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
               <div
-                className={`h-full rounded-full origin-left ${
+                className={`h-full rounded-full ltr:origin-left rtl:origin-right ${
                   fuseProgress < 0.3 ? 'bg-rose-500' : 'bg-amber-400'
                 }`}
                 style={{ transform: `scaleX(${fuseProgress})` }}
@@ -454,13 +482,15 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
             ) : (
               <X className="w-4 h-4" aria-hidden="true" />
             )}
-            <span className="font-mono tabular-nums">{feedback.text}</span>
+            <span dir="ltr" className="font-mono tabular-nums">
+              {feedback.text}
+            </span>
           </div>
         )}
       </div>
 
-      {/* 3 Response Keys */}
-      <div className="w-full max-w-lg mt-2 grid grid-cols-3 gap-2 sm:gap-2.5">
+      {/* 3 Response Keys (always LTR so Left/Equal/Right match Arrow keys & left/right cards) */}
+      <div dir="ltr" className="w-full max-w-lg mt-2 grid grid-cols-3 gap-2 sm:gap-2.5">
         <button
           type="button"
           disabled={phase !== 'ACTIVE'}
@@ -468,7 +498,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
           className="h-12 sm:h-13 rounded-xl bg-slate-100 hover:bg-white text-slate-950 border-b-4 border-b-slate-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
         >
           <ArrowLeft className="w-4 h-4 text-teal-600" aria-hidden="true" />
-          <span>Left</span>
+          <span>{ar ? 'يسار' : 'Left'}</span>
         </button>
 
         <button
@@ -478,7 +508,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
           className="h-12 sm:h-13 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/15 border-b-4 border-b-slate-950 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
         >
           <ArrowDown className="w-4 h-4 text-amber-400" aria-hidden="true" />
-          <span>Equal</span>
+          <span>{ar ? 'متساوٍ' : 'Equal'}</span>
         </button>
 
         <button
@@ -487,7 +517,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
           onClick={() => handlePick('right')}
           className="h-12 sm:h-13 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-white/15 border-b-4 border-b-slate-950 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer whitespace-nowrap"
         >
-          <span>Right</span>
+          <span>{ar ? 'يمين' : 'Right'}</span>
           <ArrowRight className="w-4 h-4 text-teal-400" aria-hidden="true" />
         </button>
       </div>
@@ -495,7 +525,15 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
       <div className="w-full max-w-lg mt-4 flex items-center justify-between">
         <span className="text-xs text-slate-400 inline-flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>{current.rule === 'higher' ? 'Higher Value' : 'Lower Value'}</span>
+          <span>
+            {current.rule === 'higher'
+              ? ar
+                ? 'القيمة الأكبر'
+                : 'Higher Value'
+              : ar
+              ? 'القيمة الأقل'
+              : 'Lower Value'}
+          </span>
         </span>
         <button
           type="button"
@@ -504,7 +542,7 @@ export const MentalPulseStage: React.FC<MentalPulseStageProps> = ({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Solve Left ({hintsLeft})</span>
+          <span>{ar ? `كشف اليسار (${hintsLeft})` : `Solve Left (${hintsLeft})`}</span>
         </button>
       </div>
     </div>

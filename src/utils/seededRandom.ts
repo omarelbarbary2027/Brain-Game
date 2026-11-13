@@ -12,10 +12,10 @@ export function getPreviousDateKey(dateKey: string): string {
   return getLocalDateKey(dt);
 }
 
-export function formatReadableDate(dateKey: string): string {
+export function formatReadableDate(dateKey: string, lang: 'en' | 'ar' = 'en'): string {
   const [y, m, d] = dateKey.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString('en-US', {
+  return dt.toLocaleDateString(lang === 'ar' ? 'ar-EG-u-nu-latn' : 'en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

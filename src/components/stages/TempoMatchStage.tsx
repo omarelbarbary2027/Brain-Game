@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Clock, Eye, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
@@ -28,12 +29,20 @@ interface TempoMatchStageProps {
 const SHAPES: ShapeType[] = ['circle', 'triangle', 'square', 'diamond'];
 const FINISHES: FinishType[] = ['teal', 'brass', 'ivory'];
 
+const SHAPE_LABELS_AR: Record<ShapeType, string> = {
+  circle: 'دائرة',
+  triangle: 'مثلث',
+  square: 'مربع',
+  diamond: 'معيّن',
+};
+
 const FINISH_STYLES: Record<
   FinishType,
-  { label: string; bg: string; border: string; stroke: string; fill: string }
+  { label: string; arLabel: string; bg: string; border: string; stroke: string; fill: string }
 > = {
   teal: {
     label: 'Teal',
+    arLabel: 'فيروزي',
     bg: 'bg-teal-950/75',
     border: 'border-teal-400/80',
     stroke: '#2DD4BF',
@@ -41,6 +50,7 @@ const FINISH_STYLES: Record<
   },
   brass: {
     label: 'Brass',
+    arLabel: 'نحاسي',
     bg: 'bg-amber-950/65',
     border: 'border-amber-400/80',
     stroke: '#FBBF24',
@@ -48,6 +58,7 @@ const FINISH_STYLES: Record<
   },
   ivory: {
     label: 'Ivory',
+    arLabel: 'عاجي',
     bg: 'bg-slate-100',
     border: 'border-white',
     stroke: '#0F172A',
@@ -222,6 +233,9 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const { deck, phase2Start, phase3Start } = useMemo(
     () => generateDeck(seed, difficulty),
     [seed, difficulty]
@@ -361,11 +375,10 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
     streakRef.current = 0;
     setStreak(0);
     sound.playMiss();
-    setFeedback({ correct: false, text: 'Time expired' });
+    setFeedback({ correct: false, text: ar ? 'انتهى الوقت' : 'Time expired' });
     setTimeout(advanceCard, 220);
-  }, [phase, advanceCard]);
+  }, [phase, advanceCard, ar]);
 
-  // Live Per-Card Fuse Timer (pause-safe)
   useEffect(() => {
     if (phase !== 'ACTIVE') return;
     setFuseProgress(1);
@@ -422,7 +435,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
         sound.playSuccess(nextStreak);
         setFeedback({
           correct: true,
-          text: `+${pts} pts · ${reactionMs} ms`,
+          text: ar ? `+${pts} نقطة · ${reactionMs} ms` : `+${pts} pts · ${reactionMs} ms`,
         });
       } else {
         streakRef.current = 0;
@@ -430,13 +443,19 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
         sound.playMiss();
         setFeedback({
           correct: false,
-          text: currentCard.isMatch ? 'Missed match' : 'Not a match',
+          text: ar
+            ? currentCard.isMatch
+              ? 'كانت مطابقة'
+              : 'لم تكن مطابقة'
+            : currentCard.isMatch
+            ? 'Missed match'
+            : 'Not a match',
         });
       }
 
       setTimeout(advanceCard, 150);
     },
-    [isPaused, phase, currentCard, advanceCard]
+    [isPaused, phase, currentCard, advanceCard, ar]
   );
 
   const handlePeekHint = useCallback(() => {
@@ -480,9 +499,15 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
   const finishStyle = FINISH_STYLES[currentCard.finish];
   const ruleLabel =
     currentCard.rule === 'shape1'
-      ? '1-Back: Same SHAPE as previous card?'
+      ? ar
+        ? '1-Back: نفس الشكل مقارنة بالبطاقة السابقة؟'
+        : '1-Back: Same SHAPE as previous card?'
       : currentCard.rule === 'finish1'
-      ? '1-Back: Same FINISH (color & pattern) as previous?'
+      ? ar
+        ? '1-Back: نفس اللون والنمط مقارنة بالسابقة؟'
+        : '1-Back: Same FINISH (color & pattern) as previous?'
+      : ar
+      ? '2-Back: نفس الشكل مقارنة بقبل بطاقتين؟'
       : '2-Back Blitz: Same SHAPE as 2 cards ago?';
 
   const prev2Card = cardIdx >= 2 ? deck[cardIdx - 2] : null;
@@ -503,9 +528,13 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
             }
           >
             {phase === 'ANCHOR'
-              ? 'Memorize Starting Card'
+              ? ar
+                ? 'احفظ بطاقة البداية'
+                : 'Memorize Starting Card'
               : phase === 'RULE_SHIFT'
-              ? 'Rule Shift Incoming'
+              ? ar
+                ? 'تبدّل قاعدة المقارنة'
+                : 'Rule Shift Incoming'
               : ruleLabel}
           </span>
           <span className="font-mono tabular-nums text-slate-400">
@@ -515,7 +544,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
 
         <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-transform duration-150 origin-left ${
+            className={`h-full rounded-full transition-transform duration-150 ltr:origin-left rtl:origin-right ${
               currentCard.rule === 'shape2'
                 ? 'bg-rose-400'
                 : currentCard.rule === 'finish1'
@@ -534,18 +563,24 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
         {peekVisible && referenceCard && (
           <div className="flex flex-col items-center gap-1.5 animate-card-enter shrink-0">
             <span className="text-[11px] font-medium text-slate-400">
-              {currentCard.rule === 'shape2' ? '2 Ago' : 'Prev'}
+              {currentCard.rule === 'shape2'
+                ? ar
+                  ? 'قبل 2'
+                  : '2 Ago'
+                : ar
+                ? 'السابقة'
+                : 'Prev'}
             </span>
             <div
               className={`w-20 h-28 sm:w-24 sm:h-32 rounded-xl border flex flex-col items-center justify-center gap-1.5 ${FINISH_STYLES[referenceCard.finish].bg} ${FINISH_STYLES[referenceCard.finish].border}`}
             >
               <CardGlyph shape={referenceCard.shape} finish={referenceCard.finish} compact />
               <span
-                className={`text-[11px] font-medium capitalize ${
+                className={`text-[11px] font-medium ${ar ? '' : 'capitalize'} ${
                   referenceCard.finish === 'ivory' ? 'text-slate-800' : 'text-slate-200'
                 }`}
               >
-                {referenceCard.shape}
+                {ar ? SHAPE_LABELS_AR[referenceCard.shape] : referenceCard.shape}
               </span>
             </div>
           </div>
@@ -554,21 +589,39 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
         {phase === 'RULE_SHIFT' ? (
           <div className="w-72 rounded-2xl bg-[#131C2E] border-2 border-amber-400/80 shadow-2xl flex flex-col items-center justify-center p-6 text-center animate-card-enter space-y-3">
             <span className="text-xs font-mono text-amber-300">
-              {currentCard.rule === 'shape2' ? 'PHASE 3 · 2-BACK BLITZ' : 'PHASE 2 · RULE SHIFT'}
+              {currentCard.rule === 'shape2'
+                ? ar
+                  ? 'المرحلة 3 · قفزة مزدوجة 2-Back'
+                  : 'PHASE 3 · 2-BACK BLITZ'
+                : ar
+                ? 'المرحلة 2 · تبدّل القاعدة'
+                : 'PHASE 2 · RULE SHIFT'}
             </span>
             <h3 className="font-display text-2xl font-bold text-white">
-              {currentCard.rule === 'shape2' ? 'Match 2 Cards Ago' : 'Match Finish'}
+              {currentCard.rule === 'shape2'
+                ? ar
+                  ? 'طابق الشكل قبل بطاقتين'
+                  : 'Match 2 Cards Ago'
+                : ar
+                ? 'طابق اللون والنمط'
+                : 'Match Finish'}
             </h3>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
               {currentCard.rule === 'shape2'
-                ? 'Compare each card’s SHAPE against the card shown 2 steps earlier.'
+                ? ar
+                  ? 'قارن شكل كل بطاقة بالبطاقة التي ظهرت قبلها بخطوتين.'
+                  : 'Compare each card’s SHAPE against the card shown 2 steps earlier.'
+                : ar
+                ? 'تجاهل الشكل الآن، وقارن اللون والنمط الداخلي فقط مع البطاقة السابقة.'
                 : 'Ignore shape now. Compare only color and inner pattern to the previous card.'}
             </p>
 
             {currentCard.rule === 'shape2' && prev2Card && prev1Card && (
               <div className="flex items-center gap-3 pt-1">
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-mono text-rose-300">2 Ago (Next Target)</span>
+                  <span className="text-[10px] font-mono text-rose-300">
+                    {ar ? 'قبل 2 (الهدف)' : '2 Ago (Next Target)'}
+                  </span>
                   <div
                     className={`w-16 h-20 rounded-lg border flex items-center justify-center ${FINISH_STYLES[prev2Card.finish].bg} ${FINISH_STYLES[prev2Card.finish].border}`}
                   >
@@ -576,7 +629,9 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
                   </div>
                 </div>
                 <div className="flex flex-col items-center gap-1 opacity-75">
-                  <span className="text-[10px] font-mono text-slate-400">1 Ago</span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {ar ? 'قبل 1' : '1 Ago'}
+                  </span>
                   <div
                     className={`w-16 h-20 rounded-lg border flex items-center justify-center ${FINISH_STYLES[prev1Card.finish].bg} ${FINISH_STYLES[prev1Card.finish].border}`}
                   >
@@ -591,12 +646,11 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
               onClick={resumeAfterShift}
               className="mt-1 px-4 py-2 rounded-lg bg-amber-400 text-slate-950 font-semibold text-xs cursor-pointer"
             >
-              Continue (Space)
+              {ar ? 'متابعة (Space)' : 'Continue (Space)'}
             </button>
           </div>
         ) : (
           <div className="relative">
-            {/* Stacked Deck Depth */}
             <div
               className="absolute inset-0 translate-x-2 translate-y-2 rounded-2xl bg-slate-800/70 border border-white/10"
               aria-hidden="true"
@@ -609,18 +663,18 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
             >
               <div className="w-full flex items-center justify-between">
                 <span
-                  className={`text-xs font-medium capitalize ${
+                  className={`text-xs font-medium ${ar ? '' : 'capitalize'} ${
                     currentCard.finish === 'ivory' ? 'text-slate-600' : 'text-slate-300'
                   }`}
                 >
-                  {finishStyle.label}
+                  {ar ? finishStyle.arLabel : finishStyle.label}
                 </span>
                 <span
                   className={`text-xs font-mono tabular-nums ${
                     currentCard.finish === 'ivory' ? 'text-slate-500' : 'text-slate-400'
                   }`}
                 >
-                  {phase === 'ANCHOR' ? 'START' : `#${cardIdx}`}
+                  {phase === 'ANCHOR' ? (ar ? 'البداية' : 'START') : `#${cardIdx}`}
                 </span>
               </div>
 
@@ -629,19 +683,18 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
               <div className="w-full space-y-2">
                 <div className="text-center">
                   <span
-                    className={`text-sm font-semibold capitalize ${
+                    className={`text-sm font-semibold ${ar ? '' : 'capitalize'} ${
                       currentCard.finish === 'ivory' ? 'text-slate-900' : 'text-slate-100'
                     }`}
                   >
-                    {currentCard.shape}
+                    {ar ? SHAPE_LABELS_AR[currentCard.shape] : currentCard.shape}
                   </span>
                 </div>
 
-                {/* Live Per-Card Fuse Bar */}
                 {phase === 'ACTIVE' && (
                   <div className="h-1.5 w-full rounded-full bg-black/25 overflow-hidden">
                     <div
-                      className={`h-full rounded-full origin-left ${
+                      className={`h-full rounded-full ltr:origin-left rtl:origin-right ${
                         fuseProgress < 0.3 ? 'bg-rose-500' : 'bg-amber-400'
                       }`}
                       style={{ transform: `scaleX(${fuseProgress})` }}
@@ -667,14 +720,20 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
             ) : (
               <X className="w-4 h-4" aria-hidden="true" />
             )}
-            <span className="font-mono tabular-nums">{feedback.text}</span>
+            <span dir="ltr" className="font-mono tabular-nums">
+              {feedback.text}
+            </span>
           </div>
         ) : phase === 'ANCHOR' ? (
-          <p className="text-sm text-slate-300">Memorize this card — tap Ready or wait</p>
+          <p className="text-sm text-slate-300">
+            {ar
+              ? 'احفظ هذه البطاقة — اضغط جاهز أو انتظر'
+              : 'Memorize this card — tap Ready or wait'}
+          </p>
         ) : null}
       </div>
 
-      {/* Response Controls */}
+      {/* Response Controls (kept LTR so ArrowLeft=Different, ArrowRight=Match stay consistent) */}
       <div className="w-full max-w-md mt-3 flex flex-col items-center gap-3">
         {phase === 'ANCHOR' ? (
           <button
@@ -682,10 +741,10 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
             onClick={startFromAnchor}
             className="w-full max-w-xs h-12 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap"
           >
-            Ready (Space)
+            {ar ? 'جاهز (Space)' : 'Ready (Space)'}
           </button>
         ) : (
-          <div className="grid grid-cols-2 gap-3 w-full">
+          <div dir="ltr" className="grid grid-cols-2 gap-3 w-full">
             <button
               type="button"
               disabled={phase !== 'ACTIVE'}
@@ -693,7 +752,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
               className="h-14 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-slate-100 border border-white/15 border-b-4 border-b-slate-950 font-semibold text-sm flex items-center justify-center gap-2 transition-transform disabled:opacity-40 cursor-pointer whitespace-nowrap"
             >
               <ArrowLeft className="w-4 h-4 text-rose-400" aria-hidden="true" />
-              <span>Different</span>
+              <span>{ar ? 'مختلف' : 'Different'}</span>
               <span className="text-xs font-mono text-slate-400 hidden sm:inline">[D]</span>
             </button>
             <button
@@ -702,7 +761,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
               onClick={() => handleAnswer(true)}
               className="h-14 rounded-xl bg-slate-100 hover:bg-white active:scale-[0.98] text-slate-950 border-b-4 border-b-slate-300 font-semibold text-sm flex items-center justify-center gap-2 transition-transform disabled:opacity-40 cursor-pointer whitespace-nowrap"
             >
-              <span>Match</span>
+              <span>{ar ? 'مطابق' : 'Match'}</span>
               <span className="text-xs font-mono text-slate-500 hidden sm:inline">[M]</span>
               <ArrowRight className="w-4 h-4 text-teal-600" aria-hidden="true" />
             </button>
@@ -714,9 +773,15 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
             <Clock className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             <span>
               {currentCard.rule === 'shape2'
-                ? '2-Back Shape'
+                ? ar
+                  ? 'الشكل (قبل 2)'
+                  : '2-Back Shape'
                 : currentCard.rule === 'finish1'
-                ? '1-Back Finish'
+                ? ar
+                  ? 'النمط واللون (قبل 1)'
+                  : '1-Back Finish'
+                : ar
+                ? 'الشكل (قبل 1)'
                 : '1-Back Shape'}
             </span>
           </span>
@@ -727,7 +792,7 @@ export const TempoMatchStage: React.FC<TempoMatchStageProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-            <span>Peek Target ({hintsLeft})</span>
+            <span>{ar ? `نظرة سريعة (${hintsLeft})` : `Peek Target (${hintsLeft})`}</span>
           </button>
         </div>
       </div>

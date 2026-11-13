@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clock, Eye, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
@@ -27,6 +28,7 @@ interface StroopReflexStageProps {
 const COLORS: {
   id: ColorId;
   label: string;
+  arLabel: string;
   textClass: string;
   btnClass: string;
   keyHint: string;
@@ -34,6 +36,7 @@ const COLORS: {
   {
     id: 'teal',
     label: 'Teal',
+    arLabel: 'فيروزي',
     textClass: 'text-teal-400',
     btnClass: 'border-teal-400/70 bg-teal-950/60 text-teal-200 hover:bg-teal-900/70',
     keyHint: '1',
@@ -41,6 +44,7 @@ const COLORS: {
   {
     id: 'amber',
     label: 'Amber',
+    arLabel: 'ذهبي',
     textClass: 'text-amber-400',
     btnClass: 'border-amber-400/70 bg-amber-950/60 text-amber-200 hover:bg-amber-900/70',
     keyHint: '2',
@@ -48,6 +52,7 @@ const COLORS: {
   {
     id: 'rose',
     label: 'Rose',
+    arLabel: 'وردي',
     textClass: 'text-rose-400',
     btnClass: 'border-rose-400/70 bg-rose-950/60 text-rose-200 hover:bg-rose-900/70',
     keyHint: '3',
@@ -55,6 +60,7 @@ const COLORS: {
   {
     id: 'ivory',
     label: 'Ivory',
+    arLabel: 'عاجي',
     textClass: 'text-slate-100',
     btnClass: 'border-white/70 bg-slate-100 text-slate-950 hover:bg-white',
     keyHint: '4',
@@ -98,7 +104,6 @@ function generatePrompts(seed: string, difficulty: Difficulty): {
 
   for (let i = 0; i < total; i++) {
     const word = ids[Math.floor(rng() * ids.length)];
-    // 78% incongruent interference
     let ink: ColorId;
     if (rng() < 0.78) {
       const others = ids.filter((c) => c !== word);
@@ -130,6 +135,9 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const { prompts, shiftIdx } = useMemo(
     () => generatePrompts(seed, difficulty),
     [seed, difficulty]
@@ -161,6 +169,14 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
 
   const current = prompts[idx];
   const fuseMs = getFuseMs(difficulty, current.directive, idx, shiftIdx);
+
+  const colorLabel = useCallback(
+    (id: ColorId) => {
+      const meta = COLORS.find((c) => c.id === id)!;
+      return ar ? meta.arLabel : meta.label;
+    },
+    [ar]
+  );
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -251,9 +267,14 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
     streakRef.current = 0;
     setStreak(0);
     sound.playMiss();
-    setFeedback({ correct: false, text: `Time expired · Answer was ${current.answer}` });
+    setFeedback({
+      correct: false,
+      text: ar
+        ? `انتهى الوقت · المطلوب ${colorLabel(current.answer)}`
+        : `Time expired · Answer was ${colorLabel(current.answer)}`,
+    });
     setTimeout(advanceNext, 260);
-  }, [phase, current.answer, advanceNext]);
+  }, [phase, current.answer, advanceNext, ar, colorLabel]);
 
   useEffect(() => {
     if (phase !== 'ACTIVE') return;
@@ -304,20 +325,25 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
         scoreRef.current += pts;
         setScore(scoreRef.current);
         sound.playSuccess(nextStreak);
-        setFeedback({ correct: true, text: `+${pts} pts · ${reactionMs} ms` });
+        setFeedback({
+          correct: true,
+          text: ar ? `+${pts} نقطة · ${reactionMs} ms` : `+${pts} pts · ${reactionMs} ms`,
+        });
       } else {
         streakRef.current = 0;
         setStreak(0);
         sound.playMiss();
         setFeedback({
           correct: false,
-          text: `Missed · Needed ${current.answer.toUpperCase()}`,
+          text: ar
+            ? `خطأ · المطلوب ${colorLabel(current.answer)}`
+            : `Missed · Needed ${colorLabel(current.answer).toUpperCase()}`,
         });
       }
 
       setTimeout(advanceNext, 160);
     },
-    [isPaused, phase, eliminated, current.answer, idx, shiftIdx, advanceNext]
+    [isPaused, phase, eliminated, current.answer, idx, shiftIdx, advanceNext, ar, colorLabel]
   );
 
   const handleUseHint = useCallback(() => {
@@ -360,6 +386,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
   }, [isPaused, phase, resumeAfterShift, handlePick, handleUseHint]);
 
   const inkMeta = COLORS.find((c) => c.id === current.ink)!;
+  const wordMeta = COLORS.find((c) => c.id === current.word)!;
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full px-4 select-none">
@@ -374,9 +401,15 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
             }
           >
             {phase === 'RULE_SHIFT'
-              ? 'Directive Escalation'
+              ? ar
+                ? 'تصعيد المطلوب قادم'
+                : 'Directive Escalation'
               : current.directive === 'ink'
-              ? 'Directive: Tap the INK COLOR'
+              ? ar
+                ? 'المطلوب: اختر لون الحبر'
+                : 'Directive: Tap the INK COLOR'
+              : ar
+              ? 'المطلوب: اختر معنى الكلمة'
               : 'Directive: Tap the WORD MEANING'}
           </span>
           <span className="font-mono tabular-nums text-slate-400">
@@ -386,7 +419,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
 
         <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className="h-full rounded-full bg-teal-400 transition-transform duration-150 origin-left"
+            className="h-full rounded-full bg-teal-400 transition-transform duration-150 ltr:origin-left rtl:origin-right"
             style={{ transform: `scaleX(${(idx + 1) / total})` }}
           />
         </div>
@@ -396,20 +429,31 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
       <div className="relative w-full max-w-md flex flex-col items-center justify-center min-h-[220px]">
         {phase === 'RULE_SHIFT' ? (
           <div className="w-full rounded-2xl bg-[#131C2E] border-2 border-amber-400/80 p-6 text-center shadow-2xl animate-card-enter space-y-3">
-            <div className="text-xs font-mono text-amber-300">PHASE 2 · DUAL DIRECTIVE</div>
+            <div className="text-xs font-mono text-amber-300">
+              {ar ? 'المرحلة 2 · تبدّل التوجيه' : 'PHASE 2 · DUAL DIRECTIVE'}
+            </div>
             <h3 className="font-display text-2xl font-bold text-white">
-              Watch the Directive
+              {ar ? 'انتبه لشريط التوجيه' : 'Watch the Directive'}
             </h3>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Prompts now alternate between <strong className="text-teal-300">INK COLOR</strong> and{' '}
-              <strong className="text-amber-300">WORD MEANING</strong>. Read the directive banner before tapping.
+              {ar ? (
+                <>
+                  تتناوب البطاقات الآن بين <strong className="text-teal-300">لون الحبر</strong> و{' '}
+                  <strong className="text-amber-300">معنى الكلمة</strong>. اقرأ التوجيه قبل اختيارك.
+                </>
+              ) : (
+                <>
+                  Prompts now alternate between <strong className="text-teal-300">INK COLOR</strong> and{' '}
+                  <strong className="text-amber-300">WORD MEANING</strong>. Read the directive banner before tapping.
+                </>
+              )}
             </p>
             <button
               type="button"
               onClick={resumeAfterShift}
               className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-semibold text-xs cursor-pointer"
             >
-              Continue (Space)
+              {ar ? 'متابعة (Space)' : 'Continue (Space)'}
             </button>
           </div>
         ) : (
@@ -425,23 +469,30 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
                     : 'text-amber-300 font-bold'
                 }
               >
-                {current.directive === 'ink' ? 'Match Ink Color' : 'Match Word Meaning'}
+                {current.directive === 'ink'
+                  ? ar
+                    ? 'طابق لون الحبر'
+                    : 'Match Ink Color'
+                  : ar
+                  ? 'طابق معنى الكلمة'
+                  : 'Match Word Meaning'}
               </span>
             </div>
 
             <div className="py-2 sm:py-3 flex items-center justify-center gap-3">
               <span
-                className={`font-display text-4xl sm:text-6xl font-bold tracking-tight uppercase ${inkMeta.textClass}`}
+                className={`font-display text-4xl sm:text-6xl font-bold tracking-tight ${
+                  ar ? '' : 'uppercase'
+                } ${inkMeta.textClass}`}
               >
-                {current.word}
+                {ar ? wordMeta.arLabel : wordMeta.label}
               </span>
             </div>
 
-            {/* Live Card Fuse */}
             <div className="w-full space-y-1.5">
               <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
                 <div
-                  className={`h-full rounded-full origin-left ${
+                  className={`h-full rounded-full ltr:origin-left rtl:origin-right ${
                     fuseProgress < 0.3 ? 'bg-rose-500' : 'bg-amber-400'
                   }`}
                   style={{ transform: `scaleX(${fuseProgress})` }}
@@ -465,13 +516,15 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
             ) : (
               <X className="w-4 h-4" aria-hidden="true" />
             )}
-            <span className="font-mono tabular-nums">{feedback.text}</span>
+            <span dir="ltr" className="font-mono tabular-nums">
+              {feedback.text}
+            </span>
           </div>
         )}
       </div>
 
-      {/* 4 Tactile Answer Keys */}
-      <div className="w-full max-w-md mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      {/* 4 Tactile Answer Keys (kept LTR so 1-4 stay in numeric order) */}
+      <div dir="ltr" className="w-full max-w-md mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {COLORS.map((c) => {
           const isEliminated = eliminated.has(c.id);
           return (
@@ -483,7 +536,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
               className={`h-14 rounded-xl border-2 border-b-4 font-semibold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer ${c.btnClass}`}
             >
               <ColorShapeIcon id={c.id} />
-              <span>{c.label}</span>
+              <span>{ar ? c.arLabel : c.label}</span>
               <span className="text-[11px] font-mono opacity-65 hidden sm:inline">
                 [{c.keyHint}]
               </span>
@@ -495,7 +548,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
       <div className="w-full max-w-md mt-4 flex items-center justify-between">
         <span className="text-xs text-slate-400 inline-flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>Keys 1–4 or Tap</span>
+          <span>{ar ? 'مفاتيح 1–4 أو اضغط الخيار' : 'Keys 1–4 or Tap'}</span>
         </span>
         <button
           type="button"
@@ -504,7 +557,7 @@ export const StroopReflexStage: React.FC<StroopReflexStageProps> = ({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Narrow 2 ({hintsLeft})</span>
+          <span>{ar ? `استبعاد خيارين (${hintsLeft})` : `Narrow 2 (${hintsLeft})`}</span>
         </button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { HelpCircle, LayoutGrid, Pause, Volume2, VolumeX } from 'lucide-react';
-import { DISCIPLINES, DisciplineId, GameMode } from '../types/game';
+import { DisciplineId, GameMode } from '../types/game';
+import { getDisciplineInfo, useLanguage } from '../i18n/LanguageContext';
 import { LiveStageHud } from './stages/PatternEchoStage';
 
 interface HudBarProps {
@@ -32,7 +33,9 @@ export const HudBar: React.FC<HudBarProps> = ({
   onShowRules,
   onPause,
 }) => {
-  const title = DISCIPLINES[discipline].title;
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+  const title = getDisciplineInfo(discipline, lang).title;
 
   return (
     <header className="pointer-events-none fixed top-0 inset-x-0 z-30 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 pt-[max(0.65rem,env(safe-area-inset-top))] pb-2.5 bg-gradient-to-b from-[#0B111E]/95 via-[#0B111E]/75 to-transparent">
@@ -40,11 +43,11 @@ export const HudBar: React.FC<HudBarProps> = ({
         <button
           type="button"
           onClick={onMenu}
-          aria-label="Return to main menu"
+          aria-label={ar ? 'العودة للقائمة الرئيسية' : 'Return to main menu'}
           className="pointer-events-auto inline-flex items-center justify-center gap-1.5 min-w-[36px] min-h-[36px] px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-100 border border-white/15 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0"
         >
           <LayoutGrid className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Menu</span>
+          <span>{ar ? 'القائمة' : 'Menu'}</span>
         </button>
 
         <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium text-slate-200 min-w-0">
@@ -55,6 +58,8 @@ export const HudBar: React.FC<HudBarProps> = ({
           <span className="text-slate-400 whitespace-nowrap text-[11px] sm:text-sm hidden xs:inline">
             {mode === 'daily'
               ? `#${dailyNumber} · ${stageIndex + 1}/${totalStages}`
+              : ar
+              ? 'تدريب حر'
               : 'Practice'}
           </span>
         </div>
@@ -64,12 +69,16 @@ export const HudBar: React.FC<HudBarProps> = ({
         {showPlayMetrics && (
           <div className="flex items-center gap-2.5 sm:gap-4 text-xs sm:text-sm font-mono tabular-nums">
             <div className="flex items-center gap-1">
-              <span className="text-slate-400 font-sans text-[11px] sm:text-xs hidden sm:inline">Score</span>
-              <span className="text-white font-semibold">{hud.score.toLocaleString()}</span>
+              <span className="text-slate-400 font-sans text-[11px] sm:text-xs hidden sm:inline">
+                {ar ? 'النقاط' : 'Score'}
+              </span>
+              <span className="text-white font-semibold">{hud.score.toLocaleString('en-US')}</span>
             </div>
 
             <div className="flex items-center gap-1">
-              <span className="text-slate-400 font-sans text-[11px] sm:text-xs hidden sm:inline">Streak</span>
+              <span className="text-slate-400 font-sans text-[11px] sm:text-xs hidden sm:inline">
+                {ar ? 'التتابع' : 'Streak'}
+              </span>
               <span className={hud.streak > 1 ? 'text-amber-300 font-semibold' : 'text-slate-200'}>
                 ×{hud.streak}
               </span>
@@ -77,8 +86,12 @@ export const HudBar: React.FC<HudBarProps> = ({
 
             {hud.lastReactionMs !== null && (
               <div className="hidden md:flex items-center gap-1.5">
-                <span className="text-slate-400 font-sans text-xs">Speed</span>
-                <span className="text-teal-300 font-semibold">{hud.lastReactionMs} ms</span>
+                <span className="text-slate-400 font-sans text-xs">
+                  {ar ? 'السرعة' : 'Speed'}
+                </span>
+                <span dir="ltr" className="text-teal-300 font-semibold">
+                  {hud.lastReactionMs} ms
+                </span>
               </div>
             )}
           </div>
@@ -89,18 +102,26 @@ export const HudBar: React.FC<HudBarProps> = ({
             <button
               type="button"
               onClick={onShowRules}
-              aria-label="Show stage rules"
+              aria-label={ar ? 'عرض شرح المرحلة' : 'Show stage rules'}
               className="inline-flex items-center justify-center gap-1.5 min-w-[36px] min-h-[36px] px-2 sm:px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-white/10 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
             >
               <HelpCircle className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-400" aria-hidden="true" />
-              <span className="hidden sm:inline">Rules</span>
+              <span className="hidden sm:inline">{ar ? 'الشرح' : 'Rules'}</span>
             </button>
           )}
 
           <button
             type="button"
             onClick={onToggleMute}
-            aria-label={muted ? 'Unmute sound' : 'Mute sound'}
+            aria-label={
+              ar
+                ? muted
+                  ? 'تشغيل الصوت'
+                  : 'كتم الصوت'
+                : muted
+                ? 'Unmute sound'
+                : 'Mute sound'
+            }
             className="inline-flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 sm:p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-white/10 transition-colors cursor-pointer"
           >
             {muted ? (
@@ -114,11 +135,11 @@ export const HudBar: React.FC<HudBarProps> = ({
             <button
               type="button"
               onClick={onPause}
-              aria-label="Pause game"
+              aria-label={ar ? 'إيقاف مؤقت' : 'Pause game'}
               className="inline-flex items-center justify-center gap-1.5 min-w-[36px] min-h-[36px] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-white/10 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
             >
               <Pause className="w-4 h-4 sm:w-3.5 sm:h-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Pause</span>
+              <span className="hidden sm:inline">{ar ? 'إيقاف' : 'Pause'}</span>
             </button>
           )}
         </div>

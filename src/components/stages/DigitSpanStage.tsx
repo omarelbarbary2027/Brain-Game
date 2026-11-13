@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight, Check, Clock, Delete, Eye, RotateCcw, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng, randInt } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
@@ -63,6 +64,9 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const rounds = useMemo(() => generateSpanRounds(seed, difficulty), [seed, difficulty]);
   const totalRounds = rounds.length;
 
@@ -180,7 +184,6 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
     [roundIdx, totalRounds, finishStage]
   );
 
-  // Rule shift intro before Round 4 (Reverse Span)
   const beginFromShift = useCallback(() => {
     if (phase !== 'RULE_SHIFT') return;
     sound.playTick();
@@ -212,7 +215,6 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [phase, beginFromShift]);
 
-  // Sequential digit flash timer (pause-safe)
   useEffect(() => {
     if (phase !== 'FLASH') return;
     const gapMs = 115;
@@ -271,12 +273,13 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
     sound.playMiss();
     setRoundOutcome({
       correct: false,
-      text: `Time expired · Expected ${currentRound.expected.join('')}`,
+      text: ar
+        ? `انتهى الوقت · الإجابة ${currentRound.expected.join('')}`
+        : `Time expired · Expected ${currentRound.expected.join('')}`,
     });
     goNextRound(1200);
-  }, [phase, currentRound.expected, goNextRound]);
+  }, [phase, currentRound.expected, goNextRound, ar]);
 
-  // Input phase fuse timer (pause-safe)
   useEffect(() => {
     if (phase !== 'INPUT') return;
     let lastTick = performance.now();
@@ -337,7 +340,9 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
         sound.playSuccess(nextStreak);
         setRoundOutcome({
           correct: true,
-          text: `Exact span · +${pts} pts · ${reactionMs} ms`,
+          text: ar
+            ? `تسلسل دقيق · +${pts} نقطة · ${reactionMs} ms`
+            : `Exact span · +${pts} pts · ${reactionMs} ms`,
         });
         goNextRound(850);
       } else {
@@ -346,12 +351,14 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
         sound.playMiss();
         setRoundOutcome({
           correct: false,
-          text: `Expected ${currentRound.expected.join('')}`,
+          text: ar
+            ? `الصحيح ${currentRound.expected.join('')}`
+            : `Expected ${currentRound.expected.join('')}`,
         });
         goNextRound(1250);
       }
     },
-    [currentRound, goNextRound]
+    [currentRound, goNextRound, ar]
   );
 
   const handleDigitPress = useCallback(
@@ -433,14 +440,21 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
             }
           >
             {phase === 'RULE_SHIFT'
-              ? 'Reverse Span Incoming'
+              ? ar
+                ? 'استعد للتسلسل المعكوس'
+                : 'Reverse Span Incoming'
               : currentRound.reverse
-              ? `REVERSE Order · ${currentRound.digits.length} Digits`
+              ? ar
+                ? `ترتيب عكسي · ${currentRound.digits.length} أرقام`
+                : `REVERSE Order · ${currentRound.digits.length} Digits`
+              : ar
+              ? `نفس الترتيب · ${currentRound.digits.length} أرقام`
               : `Forward Order · ${currentRound.digits.length} Digits`}
           </span>
           <div className="flex items-center gap-3 font-mono tabular-nums">
             {phase === 'INPUT' && (
               <span
+                dir="ltr"
                 className={`inline-flex items-center gap-1 ${
                   secondsLeft <= 3 ? 'text-rose-400 font-bold' : 'text-teal-300'
                 }`}
@@ -450,14 +464,14 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
               </span>
             )}
             <span className="text-slate-400">
-              Round {roundIdx + 1}/{totalRounds}
+              {ar ? `الجولة ${roundIdx + 1}/${totalRounds}` : `Round ${roundIdx + 1}/${totalRounds}`}
             </span>
           </div>
         </div>
 
         <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className={`h-full rounded-full origin-left ${
+            className={`h-full rounded-full ltr:origin-left rtl:origin-right ${
               phase === 'FLASH'
                 ? 'bg-amber-400'
                 : secondsLeft <= 3
@@ -485,32 +499,45 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
           <div className="w-full rounded-2xl bg-[#131C2E] border-2 border-amber-400/80 p-5 sm:p-6 text-center shadow-2xl animate-card-enter space-y-3">
             <div className="inline-flex items-center gap-1.5 text-xs font-mono text-amber-300">
               <ArrowLeftRight className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>ROUNDS 4–5 · REVERSE SPAN</span>
+              <span>{ar ? 'الجولتان 4–5 · تسلسل معكوس' : 'ROUNDS 4–5 · REVERSE SPAN'}</span>
             </div>
-            <h3 className="font-display text-2xl font-bold text-white">Enter Digits in Reverse</h3>
+            <h3 className="font-display text-2xl font-bold text-white">
+              {ar ? 'أدخل الأرقام بالعكس' : 'Enter Digits in Reverse'}
+            </h3>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Watch the sequence flash, then type the digits <strong className="text-amber-300">backwards</strong>{' '}
-              (e.g. 4–9–2 becomes 2–9–4).
+              {ar ? (
+                <>
+                  راقب الأرقام المتتابعة ثم أدخلها <strong className="text-amber-300">بترتيب عكسي</strong>{' '}
+                  (مثال: <span dir="ltr">4–9–2</span> تصبح <span dir="ltr">2–9–4</span>).
+                </>
+              ) : (
+                <>
+                  Watch the sequence flash, then type the digits{' '}
+                  <strong className="text-amber-300">backwards</strong> (e.g. 4–9–2 becomes 2–9–4).
+                </>
+              )}
             </p>
             <button
               type="button"
               onClick={beginFromShift}
               className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-semibold text-xs cursor-pointer"
             >
-              Ready (Space)
+              {ar ? 'جاهز (Space)' : 'Ready (Space)'}
             </button>
           </div>
         ) : phase === 'FLASH' ? (
           <div className="w-full rounded-2xl bg-[#131C2E] border-2 border-white/15 p-5 sm:p-6 flex flex-col items-center justify-center gap-4 shadow-2xl">
             <div className="text-xs font-mono text-slate-400">
-              Digit {flashSlot + 1} of {currentRound.digits.length}
+              {ar
+                ? `الرقم ${flashSlot + 1} من ${currentRound.digits.length}`
+                : `Digit ${flashSlot + 1} of ${currentRound.digits.length}`}
             </div>
             <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#F8FAFC] border-2 border-amber-400 border-b-4 shadow-xl flex items-center justify-center">
               <span className="font-mono text-5xl sm:text-6xl font-bold text-slate-950 tabular-nums">
                 {flashBlank ? '' : currentRound.digits[flashSlot]}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div dir="ltr" className="flex items-center gap-2">
               {currentRound.digits.map((_, i) => (
                 <span
                   key={i}
@@ -527,8 +554,8 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
           </div>
         ) : (
           <div className="w-full space-y-3">
-            {/* Answer Digit Slots */}
-            <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+            {/* Answer Digit Slots (always LTR so digits read naturally in order) */}
+            <div dir="ltr" className="flex items-center justify-center gap-1.5 sm:gap-2">
               {currentRound.expected.map((_, slotIdx) => {
                 const val = entered[slotIdx];
                 const isFilled = val !== undefined;
@@ -564,19 +591,25 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
                   ) : (
                     <X className="w-4 h-4" aria-hidden="true" />
                   )}
-                  <span className="font-mono tabular-nums">{roundOutcome.text}</span>
+                  <span dir="ltr" className="font-mono tabular-nums">
+                    {roundOutcome.text}
+                  </span>
                 </div>
               ) : (
                 <span className="text-xs text-slate-400">
                   {currentRound.reverse
-                    ? 'Enter digits in REVERSE order'
+                    ? ar
+                      ? 'أدخل الأرقام بترتيب عكسي'
+                      : 'Enter digits in REVERSE order'
+                    : ar
+                    ? 'أدخل الأرقام بنفس الترتيب'
                     : 'Enter digits in exact order'}
                 </span>
               )}
             </div>
 
-            {/* Tactile 3x4 Numeric Keypad */}
-            <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
+            {/* Tactile 3x4 Numeric Keypad (always LTR 1-9 layout) */}
+            <div dir="ltr" className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                 <button
                   key={num}
@@ -592,7 +625,7 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
                 type="button"
                 disabled={phase !== 'INPUT' || entered.length === 0}
                 onClick={handleBackspace}
-                aria-label="Backspace"
+                aria-label={ar ? 'حذف رقم' : 'Backspace'}
                 className="h-12 sm:h-13 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-300 border border-white/10 border-b-4 border-b-slate-950 flex items-center justify-center transition-transform disabled:opacity-35 cursor-pointer"
               >
                 <Delete className="w-5 h-5" aria-hidden="true" />
@@ -609,7 +642,7 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
                 type="button"
                 disabled={phase !== 'INPUT' || entered.length === 0}
                 onClick={handleClear}
-                aria-label="Clear digits"
+                aria-label={ar ? 'مسح الكل' : 'Clear digits'}
                 className="h-12 sm:h-13 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-300 border border-white/10 border-b-4 border-b-slate-950 flex items-center justify-center transition-transform disabled:opacity-35 cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4" aria-hidden="true" />
@@ -621,7 +654,9 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
 
       {/* Footer Hint */}
       <div className="w-full max-w-md mt-3 flex items-center justify-between">
-        <span className="text-xs text-slate-400">Keypad or 0–9 Keys</span>
+        <span className="text-xs text-slate-400">
+          {ar ? 'لوحة الأرقام أو مفاتيح 0–9' : 'Keypad or 0–9 Keys'}
+        </span>
         <button
           type="button"
           onClick={handleUseHint}
@@ -629,7 +664,7 @@ export const DigitSpanStage: React.FC<DigitSpanStageProps> = ({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Reveal Next ({hintsLeft})</span>
+          <span>{ar ? `كشف التالي (${hintsLeft})` : `Reveal Next (${hintsLeft})`}</span>
         </button>
       </div>
     </div>

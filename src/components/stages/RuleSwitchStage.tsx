@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clock, Eye, RefreshCw, X } from 'lucide-react';
 import { Difficulty, StageResult } from '../../types/game';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { createSeededRng, shuffleWithRng } from '../../utils/seededRandom';
 import { sound } from '../../utils/sound';
 import { LiveStageHud } from './PatternEchoStage';
@@ -23,7 +24,6 @@ interface RuleSwitchStageProps {
   onComplete: (result: StageResult) => void;
 }
 
-// 4 Fixed Reference Cards: index i has count=(i+1), shape=SHAPES[i], finish=FINISHES[i]
 const REF_CARDS: SortCardSpec[] = [
   { count: 1, shape: 'circle', finish: 'teal' },
   { count: 2, shape: 'triangle', finish: 'amber' },
@@ -31,12 +31,26 @@ const REF_CARDS: SortCardSpec[] = [
   { count: 4, shape: 'diamond', finish: 'ivory' },
 ];
 
+const SHAPE_AR: Record<SortShape, string> = {
+  circle: 'دائرة',
+  triangle: 'مثلث',
+  square: 'مربع',
+  diamond: 'معيّن',
+};
+
+const RULE_AR: Record<SortRule, string> = {
+  shape: 'الشكل',
+  count: 'العدد',
+  finish: 'اللون',
+};
+
 const FINISH_META: Record<
   SortFinish,
-  { label: string; stroke: string; fill: string; border: string; bg: string }
+  { label: string; arLabel: string; stroke: string; fill: string; border: string; bg: string }
 > = {
   teal: {
     label: 'Teal',
+    arLabel: 'فيروزي',
     stroke: '#2DD4BF',
     fill: 'rgba(45, 212, 191, 0.22)',
     border: 'border-teal-400/70',
@@ -44,6 +58,7 @@ const FINISH_META: Record<
   },
   amber: {
     label: 'Amber',
+    arLabel: 'ذهبي',
     stroke: '#FBBF24',
     fill: 'rgba(251, 191, 36, 0.22)',
     border: 'border-amber-400/70',
@@ -51,6 +66,7 @@ const FINISH_META: Record<
   },
   rose: {
     label: 'Rose',
+    arLabel: 'وردي',
     stroke: '#FB7185',
     fill: 'rgba(251, 113, 133, 0.22)',
     border: 'border-rose-400/70',
@@ -58,6 +74,7 @@ const FINISH_META: Record<
   },
   ivory: {
     label: 'Ivory',
+    arLabel: 'عاجي',
     stroke: '#F8FAFC',
     fill: 'rgba(248, 250, 252, 0.85)',
     border: 'border-white/75',
@@ -137,8 +154,6 @@ function generateDeck(seed: string, difficulty: Difficulty): {
   const rules: SortRule[] = ['shape', 'count', 'finish'];
   const ruleOrder = shuffleWithRng(rules, rng);
 
-  // Every stimulus card assigns distinct reference indices to count, shape, and finish
-  // so every dimension maps unambiguously to a different Reference Card!
   const cards: SortCardSpec[] = [];
   for (let i = 0; i < total; i++) {
     const perm = shuffleWithRng([0, 1, 2, 3], rng);
@@ -174,6 +189,9 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
   onHudUpdate,
   onComplete,
 }) => {
+  const { lang } = useLanguage();
+  const ar = lang === 'ar';
+
   const { cards, initialRule, ruleOrder, shiftEvery } = useMemo(
     () => generateDeck(seed, difficulty),
     [seed, difficulty]
@@ -289,9 +307,14 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
     streakRef.current = 0;
     setStreak(0);
     sound.playMiss();
-    setFeedback({ correct: false, text: 'Time expired — watch the matching attribute' });
+    setFeedback({
+      correct: false,
+      text: ar
+        ? 'انتهى الوقت — لاحظ الخاصية المطابقة'
+        : 'Time expired — watch the matching attribute',
+    });
     timerRef.current = window.setTimeout(advanceCard, 340);
-  }, [advanceCard]);
+  }, [advanceCard, ar]);
 
   useEffect(() => {
     remainingMsRef.current = fuseMs;
@@ -348,11 +371,21 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
           setActiveRule(ruleOrder[ruleCursorRef.current]);
           setRuleJustShiftedNote(true);
           sound.playRuleShift();
-          setFeedback({ correct: true, text: `+${pts} pts · Rule may shift next!` });
+          setFeedback({
+            correct: true,
+            text: ar
+              ? `+${pts} نقطة · قد تتبدل القاعدة الآن!`
+              : `+${pts} pts · Rule may shift next!`,
+          });
         } else {
           setRuleJustShiftedNote(false);
           sound.playSuccess(nextStreak);
-          setFeedback({ correct: true, text: `+${pts} pts · Matched · ${reactionMs} ms` });
+          setFeedback({
+            correct: true,
+            text: ar
+              ? `+${pts} نقطة · تطابق · ${reactionMs} ms`
+              : `+${pts} pts · Matched · ${reactionMs} ms`,
+          });
         }
       } else {
         streakRef.current = 0;
@@ -361,13 +394,15 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
         sound.playMiss();
         setFeedback({
           correct: false,
-          text: `Mismatch · Card #${expectedRefIdx + 1} matched the rule`,
+          text: ar
+            ? `خطأ · البطاقة #${expectedRefIdx + 1} هي المطابقة`
+            : `Mismatch · Card #${expectedRefIdx + 1} matched the rule`,
         });
       }
 
       timerRef.current = window.setTimeout(advanceCard, 260);
     },
-    [expectedRefIdx, shiftEvery, idx, total, ruleOrder, advanceCard]
+    [expectedRefIdx, shiftEvery, idx, total, ruleOrder, advanceCard, ar]
   );
 
   const handleUseHint = useCallback(() => {
@@ -413,9 +448,15 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
             <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
             <span>
               {ruleHintShown
-                ? `Active Rule: ${activeRule.toUpperCase()}`
+                ? ar
+                  ? `القاعدة الحالية: ${RULE_AR[activeRule]}`
+                  : `Active Rule: ${activeRule.toUpperCase()}`
                 : ruleJustShiftedNote
-                ? 'Hidden rule shifted — test & adapt!'
+                ? ar
+                  ? 'تبدّلت القاعدة بصمت — اختبر وتكيّف!'
+                  : 'Hidden rule shifted — test & adapt!'
+                : ar
+                ? 'صنّف حسب الشكل أو العدد أو اللون'
                 : 'Sort by Shape, Count, or Finish'}
             </span>
           </span>
@@ -426,18 +467,20 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
 
         <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
           <div
-            className="h-full rounded-full bg-teal-400 origin-left transition-transform duration-150"
+            className="h-full rounded-full bg-teal-400 ltr:origin-left rtl:origin-right transition-transform duration-150"
             style={{ transform: `scaleX(${(idx + 1) / total})` }}
           />
         </div>
       </div>
 
-      {/* 4 Reference Key Cards */}
+      {/* 4 Reference Key Cards (kept LTR so 1-4 align consistently) */}
       <div className="w-full max-w-md mb-3">
         <div className="text-[11px] text-slate-400 mb-1.5 text-center">
-          Reference Cards (Tap 1–4 to Sort Active Card)
+          {ar
+            ? 'البطاقات المرجعية (اضغط 1–4 لتصنيف البطاقة النشطة)'
+            : 'Reference Cards (Tap 1–4 to Sort Active Card)'}
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div dir="ltr" className="grid grid-cols-4 gap-2">
           {REF_CARDS.map((refCard, rIdx) => {
             const fm = FINISH_META[refCard.finish];
             return (
@@ -445,15 +488,21 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
                 key={rIdx}
                 type="button"
                 onClick={() => handlePickRef(rIdx)}
-                aria-label={`Reference ${rIdx + 1}: ${refCard.count} ${fm.label} ${refCard.shape}`}
+                aria-label={
+                  ar
+                    ? `مرجع ${rIdx + 1}: ${refCard.count} ${SHAPE_AR[refCard.shape]} ${fm.arLabel}`
+                    : `Reference ${rIdx + 1}: ${refCard.count} ${fm.label} ${refCard.shape}`
+                }
                 className={`relative h-20 sm:h-24 rounded-xl border-2 border-b-4 flex flex-col items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer ${fm.bg} ${fm.border}`}
               >
                 <span className="absolute top-1 left-1.5 text-[10px] font-mono text-slate-300">
                   {rIdx + 1}
                 </span>
                 <CardSymbolGrid spec={refCard} compact />
-                <span className="text-[10px] font-medium text-slate-200 capitalize">
-                  {refCard.count} · {fm.label}
+                <span
+                  className={`text-[10px] font-medium text-slate-200 ${ar ? '' : 'capitalize'}`}
+                >
+                  {refCard.count} · {ar ? fm.arLabel : fm.label}
                 </span>
               </button>
             );
@@ -467,9 +516,12 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
         className={`w-full max-w-xs rounded-2xl border-2 p-4 sm:p-5 shadow-2xl flex flex-col items-center justify-between gap-3 animate-card-enter ${currentFinishMeta.bg} ${currentFinishMeta.border}`}
       >
         <div className="w-full flex items-center justify-between text-xs text-slate-300">
-          <span className="capitalize font-medium">
-            {current.count} {currentFinishMeta.label} {current.shape}
-            {current.count > 1 ? 's' : ''}
+          <span className={`font-medium ${ar ? '' : 'capitalize'}`}>
+            {ar
+              ? `${current.count} × ${SHAPE_AR[current.shape]} (${currentFinishMeta.arLabel})`
+              : `${current.count} ${currentFinishMeta.label} ${current.shape}${
+                  current.count > 1 ? 's' : ''
+                }`}
           </span>
           <span className="font-mono text-slate-400">#{idx + 1}</span>
         </div>
@@ -480,7 +532,7 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
 
         <div className="w-full h-1.5 rounded-full bg-black/30 overflow-hidden">
           <div
-            className={`h-full rounded-full origin-left ${
+            className={`h-full rounded-full ltr:origin-left rtl:origin-right ${
               fuseProgress < 0.3 ? 'bg-rose-500' : 'bg-amber-400'
             }`}
             style={{ transform: `scaleX(${fuseProgress})` }}
@@ -501,7 +553,9 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
             ) : (
               <X className="w-4 h-4" aria-hidden="true" />
             )}
-            <span className="font-mono tabular-nums">{feedback.text}</span>
+            <span dir="ltr" className="font-mono tabular-nums">
+              {feedback.text}
+            </span>
           </div>
         )}
       </div>
@@ -510,7 +564,7 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
       <div className="w-full max-w-md mt-2 flex items-center justify-between">
         <span className="text-xs text-slate-400 inline-flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>Keys 1–4 or Tap Card</span>
+          <span>{ar ? 'مفاتيح 1–4 أو اضغط البطاقة' : 'Keys 1–4 or Tap Card'}</span>
         </span>
         <button
           type="button"
@@ -519,7 +573,7 @@ export const RuleSwitchStage: React.FC<RuleSwitchStageProps> = ({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 border border-white/10 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span>Reveal Rule ({hintsLeft})</span>
+          <span>{ar ? `كشف القاعدة (${hintsLeft})` : `Reveal Rule (${hintsLeft})`}</span>
         </button>
       </div>
     </div>
